@@ -1,43 +1,19 @@
-# STAYCALM · Acceptance Checklist
+# Bloom 3.0 validation
 
-## Automated verification
-- [ ] GitHub Actions testDebugUnitTest green.
-- [ ] GitHub Actions assembleDebug green.
-- [ ] Tests cover monotonic countdown math, pause/resume, completed-session stage thresholds and progress bounds.
-- [ ] Debug APK attached only after successful build.
+## Automated gates
 
-## UI verification (Android 8-16)
-- [ ] Screens fit on 360dp narrow devices and scale with accessibility text size.
-- [ ] Focus state clearly differentiates idle, paused, running and completed.
-- [ ] First tap begins focus, second tap pauses, abandoned time does not grow turtle.
-- [ ] Every tappable item has its advertised action and correct icon/label.
-- [ ] Contrast and tap targets are usable in bright sunlight and dark environments.
-- [ ] Egg crack, shell separation, hatchling emergence, juvenile and adult visibly differ.
-- [ ] Turtle progress changes only after confirmed session completion.
+- JVM: evolution boundaries, timer drift, pause clamping, reboot fallback, wall-clock changes, display rounding, streak duplicates/gaps/year boundaries.
+- Android lint and debug APK assembly.
+- Android 15 emulator: launch, pink screen screenshots, planner add/start, focus pause/resume/end, persisted timer after Activity recreation, break mode, atomic/idempotent completion, no focus credit for breaks.
 
-## Timer / scheduling
-- [ ] Time does not drift when app is backgrounded for 10+ min.
-- [ ] Pause and resume retain remaining time across activity re-creation.
-- [ ] Notification shows the active countdown and is cleared when paused.
-- [ ] Completed sessions increment exactly once after reopening or alarm delivery.
-- [ ] Exact-alarm permission allowed, denied and revoked paths are checked.
-- [ ] Screen lock, Doze, force-stop and reboot limitations are tested and documented.
+Reports and screenshots are uploaded by the main build workflow. A workflow is only verified when its run completes successfully.
 
-## Sounds
-- [ ] All seven offline recordings play without internet.
-- [ ] Switching sound mid-session updates ongoing playback.
-- [ ] Volume changes audible; Bluetooth headset and incoming call audio focus handled.
-- [ ] Notification Stop controls actually stop playback.
-- [ ] App navigation and orientation changes do not desynchronize the audio indicator.
+## Device checks still useful
 
-## Planner
-- [ ] Add, edit, delete, complete tasks; month navigation and date selection.
-- [ ] Reminders scheduled and canceled correctly; no reminders for completed tasks.
-- [ ] Midnight rollover, timezone change, and user-change time settings considered.
-- [ ] User data remains local; no account needed.
+- Test large font settings, screen rotation, TalkBack, and reduced animation settings on the user's handset.
+- Allow notifications, deny notifications, and toggle precise-alarm access. Validate background completion under the handset's battery-saving modes.
+- Check DND restoration, interrupted playback, wired/Bluetooth audio, and the sound notification stop action.
+- Test reminder delivery after restart and editing a future reminder into the past.
+- Listen for acceptable soundscape loop boundaries.
 
-## Notification controls
-- [ ] DND permission explained and requested from system settings.
-- [ ] Focus starts/restores DND only on authorized devices.
-- [ ] Important exceptions follow system priority rules.
-- [ ] DND exits on finish, pause, abandon and relevant lifecycle recovery.
+No finite set of checks can guarantee an app has no defects on every Android device.

@@ -1,33 +1,38 @@
-# STAYCALM 2.0
+# STAYCALM · Bloom 3.0
 
-A locally stored, privacy-first Android focus studio. Designed for deep work, not screen time.
+A native Android focus companion in a cohesive pink theme. Kotlin, Jetpack Compose, Material 3. Android 8.0+.
 
-## Design
-- Manrope type, inky plum (#26232B), premium rose (#C45E83), ivory surfaces, clear contrast and restrained motion.
-- Native Jetpack Compose Material 3, accessible text and large hit targets.
-- Custom vector turtle / egg-hatching story. Six stages with motion based on springs, crack geometry, and scaling. The turtle grows from *total completed minutes*, not just opening the screen.
-- Offline seven-sound field-recording library: rain, ocean, birds, stream, fireplace, wind, thunder. Adjustable volume and loop playback.
+## Features
 
-## Functional scope
-- Focus sessions with custom time, pause/resume, elapsed-realtime clock and recoverable persisted state.
-- AlarmManager completion alerts (inexact delivery under Doze; UI timer remains correct).
-- Optional Android Do Not Disturb while focusing, with user-granted Notification Policy Access and correct Android 15 implicit-rule semantics.
-- Fully local monthly planner: add, edit, complete and remove tasks with date/time, time budgets and reminders; task reminders are inexact Android alarms.
-- Focus history with daily/weekly insights and a local daily goal.
-- Does not request internet permission, does not run cloud sync, and does not contain an AI coach.
+- Circular focus timer with animated progress, 15/25/45-minute presets and custom 5–180-minute durations.
+- Separate short-break mode with 5/10/15-minute presets. Breaks do not count toward focus progress.
+- Pause/resume, persisted sessions, completion summary, and confirmation before abandoning a session.
+- Session intentions, recent history, daily goal progress, seven-day chart, and consecutive-day streak.
+- Monthly planner with task editing, completion, reminders, and one-tap focus on a task.
+- Six-stage pink turtle companion, earned through completed focus time.
+- Seven bundled offline soundscapes, volume control, audio-focus handling, and notification stop action.
+- Optional Do Not Disturb and precise session alerts, subject to Android permissions.
+- Local-only storage, no accounts or analytics.
 
-## Build a debug APK
-1. Open **Actions → STAYCALM · Android APK → newest successful run → Artifacts**.
-2. Download **STAYCALM-v2-debug-apk**, extract, and install `app-debug.apk`.
-3. For local command-line builds with Android SDK 35 and Java 17: `bash scripts/fetch-assets.sh && gradle :app:assembleDebug`.
+## Build and download
 
-The audio and font are downloaded at **build time**, bundled in the APK, and never streamed at runtime. See `ASSET-LICENSES.md`. Internet access is needed for building, not for using the app.
+Pushes to `main` run `.github/workflows/android-apk.yml`. The workflow downloads licensed offline assets, runs JVM tests and Android lint, builds an installable debug APK, then exercises session and planner flows on an Android 15 emulator.
 
-## Platform caveats
-- Apps cannot silently block every notification: DND needs user authorization, and OS exceptions/priority contacts still apply.
-- Android may defer background alarms in Doze; exact delivery requires additional user-granted special access and is deliberately not requested.
-- Users can force-stop the app; Android cancels pending alarms when an app is force-stopped. Reopening reconciles stored sessions.
-- MediaPlayer runs in a foreground media playback service when ambient sound is playing, and must be started by user interaction.
+In the successful Actions run, download **STAYCALM-Bloom-v3-debug-apk**, extract the ZIP, and install `app-debug.apk`. The **STAYCALM-verification** artifact contains check reports and emulator screenshots.
 
-## Verification
-CI checks `testDebugUnitTest` and `assembleDebug`. Runtime notification, DND, audio, lifecycle and animation testing still need a real Android device.
+This is a debug-signed build, not a Play Store release. CI-generated debug signing keys may differ between runs; an update can require removing the previously installed debug app, which erases its local data. Production distribution needs a stable private signing key.
+
+### Local build
+
+Requirements: JDK 17, Gradle 8.11.1, Android SDK 35/build tools 35.0.0.
+
+```sh
+bash scripts/fetch-assets.sh
+gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+# With an Android 13+ emulator/device:
+gradle :app:connectedDebugAndroidTest
+```
+
+The APK is `app/build/outputs/apk/debug/app-debug.apk`. Android can delay notifications without precise-alarm permission; manufacturers may additionally restrict background execution. The timer reconciles its deadline on reopening.
+
+See `DESIGN-SYSTEM.md`, `ASSET-LICENSES.md`, and `QA-CHECKLIST.md`.

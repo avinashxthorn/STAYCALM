@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.*
 import androidx.compose.ui.geometry.*
@@ -37,23 +38,23 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import kotlin.math.*
 
-private val Ink=Color(0xFF29212D)
-private val Rose=Color(0xFFC45E83)
-private val Blush=Color(0xFFF5E4E9)
-private val Fog=Color(0xFFF9F5F6)
-private val Sub=Color(0xFF897F88)
-private val Cream=Color(0xFFFFFCFB)
-private val Green=Color(0xFF447B65)
-private val DarkGreen=Color(0xFF305C50)
+private val Ink=Color(0xFF542536)
+private val Rose=Color(0xFFAC345F)
+private val Blush=Color(0xFFFCE8EE)
+private val Fog=Color(0xFFFFF8FA)
+private val Sub=Color(0xFF88616F)
+private val Cream=Color(0xFFFFF8FA)
+private val Green=Color(0xFFC76A8C)
+private val DarkGreen=Color(0xFF8D3454)
 private val Border=Color(0xFFEEE5E8)
 
-private val StaycalmColors=lightColorScheme(primary=Rose,onPrimary=Color.White,background=Fog,onBackground=Ink,surface=Color.White,onSurface=Ink,secondary=Green)
+private val StaycalmColors=lightColorScheme(primary=Rose,onPrimary=Color.White,background=Fog,onBackground=Ink,surface=Color.White,onSurface=Ink,secondary=Rose,secondaryContainer=Blush,onSecondaryContainer=Ink,primaryContainer=Blush,onPrimaryContainer=Ink,surfaceVariant=Blush,onSurfaceVariant=Sub,outline=Color(0xFFB88B9C),tertiary=Rose)
 
 class MainActivity:ComponentActivity(){
     private lateinit var store:FocusStore
     override fun onCreate(savedInstanceState:android.os.Bundle?){super.onCreate(savedInstanceState);store=FocusStore(this);Notice.channels(this)
         setContent {
-            var page by remember{mutableIntStateOf(0)}
+            var page by rememberSaveable{mutableIntStateOf(0)}
             var tick by remember{mutableLongStateOf(0L)}
             var revision by remember{mutableIntStateOf(0)}
             var sound by remember{mutableStateOf(store.lastSound())}
@@ -63,15 +64,21 @@ class MainActivity:ComponentActivity(){
             var adding by remember{mutableStateOf(false)}
             var selectedDate by remember{mutableStateOf(LocalDate.now())}
             var showReset by remember{mutableStateOf(false)}
+            var intention by remember{mutableStateOf(store.intention())}
+            var completion by remember{mutableStateOf(store.completion())}
+            var mode by remember{mutableStateOf(store.state().mode)}
             var dnd by remember{mutableStateOf(store.enableDnd())}
             var goal by remember{mutableFloatStateOf(store.dailyGoal().toFloat())}
             var volume by remember{mutableFloatStateOf(store.soundVolume())}
             var duration by remember{mutableIntStateOf(store.state().durationMinutes)}
             val permission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){}
             LaunchedEffect(Unit){if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)permission.launch(Manifest.permission.POST_NOTIFICATIONS)}
+            var knownLogCount by remember{mutableIntStateOf(store.logs().size)}
             LaunchedEffect(Unit){while(true){
                 tick=System.currentTimeMillis()
                 if(store.completeIfDue())revision++
+                completion=store.completion()
+                if(store.logs().size != knownLogCount){knownLogCount=store.logs().size;revision++}
                 playing=getSharedPreferences("staycalm_v2",MODE_PRIVATE).getBoolean("audio_playing",false)
                 delay(450)
             }}
@@ -82,16 +89,9 @@ class MainActivity:ComponentActivity(){
             val total=logs.sumOf{it.minutes}
             val stage=Evolution.stage(total)
             val today=logs.filter{Instant.ofEpochMilli(it.at).atZone(ZoneId.systemDefault()).toLocalDate()==LocalDate.now()}.sumOf{it.minutes}
-            val titleStyle=FontFamily(Font(com.staycalm.focus.R.font.manrope))
-            MaterialTheme(colorScheme=StaycalmColors,typography=Typography(
-                displayLarge=TextStyle(fontFamily=titleStyle,fontWeight=FontWeight.Bold),
-                headlineLarge=TextStyle(fontFamily=titleStyle,fontWeight=FontWeight.Bold),
-                titleLarge=TextStyle(fontFamily=titleStyle,fontWeight=FontWeight.SemiBold),
-                bodyMedium=TextStyle(fontFamily=titleStyle),
-                labelLarge=TextStyle(fontFamily=titleStyle,fontWeight=FontWeight.SemiBold)
-            )){
+            MaterialTheme(colorScheme=StaycalmColors,typography=pinkTypography()){
                 Scaffold(containerColor=Fog,bottomBar={
-                    NavigationBar(containerColor=Cream,tonalElevation=0.dp){
+                    NavigationBar(containerColor=Color.White,tonalElevation=0.dp){
                         listOf(Triple("Focus",Icons.Rounded.Timer,0),Triple("Planner",Icons.Rounded.CalendarMonth,1),Triple("Insights",Icons.Rounded.BarChart,2),Triple("Settings",Icons.Rounded.Tune,3)).forEach{(name,icon,index)->
                             NavigationBarItem(selected=page==index,onClick={page=index},icon={Icon(icon,name)},label={Text(name,fontSize=11.sp)},colors=NavigationBarItemDefaults.colors(selectedIconColor=Rose,selectedTextColor=Rose,indicatorColor=Blush))
                         }
@@ -99,14 +99,18 @@ class MainActivity:ComponentActivity(){
                 }){pad->
                     Column(Modifier.fillMaxSize().padding(pad)){
                         Row(Modifier.fillMaxWidth().padding(start=23.dp,end=23.dp,top=23.dp,bottom=9.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween){
-                            Column{Text("STAYCALM",fontWeight=FontWeight.ExtraBold,letterSpacing=2.6.sp,fontSize=19.sp,color=Ink);Text("LESS NOISE  •  MORE YOU",fontSize=9.sp,letterSpacing=1.45.sp,color=Sub)}
-                            Surface(shape=CircleShape,color=Blush){Icon(Icons.Rounded.Spa,"Stay calm",tint=Rose,modifier=Modifier.padding(12.dp).size(20.dp))}
+                            Column{Text("staycalm.",fontWeight=FontWeight.ExtraBold,letterSpacing=(-1).sp,fontSize=25.sp,color=Rose);Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, d MMMM")),fontSize=11.sp,color=Sub)}
+                            Surface(onClick={page=3},shape=CircleShape,color=Blush){Icon(Icons.Rounded.Tune,"Open settings",tint=Rose,modifier=Modifier.padding(12.dp).size(20.dp))}
                         }
+                        Crossfade(targetState=page,animationSpec=tween(220),label="page transition"){displayedPage->
                         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=22.dp),verticalArrangement=Arrangement.spacedBy(18.dp)){
                             Spacer(Modifier.height(8.dp))
-                            when(page){
+                            when(displayedPage){
                                 0->{
                                     StudioFocus(
+                                        mode=mode,intention=intention,
+                                        onIntention={intention=it;store.setIntention(it)},
+                                        onMode={newMode->mode=newMode;store.configure(if(newMode=="break")5 else 25,mode=newMode);revision++},
                                         durationMinutes=current.durationMinutes,
                                         remainingMs=left,
                                         running=current.running,
@@ -115,12 +119,12 @@ class MainActivity:ComponentActivity(){
                                         dailyGoal=store.dailyGoal(),
                                         selectedSound=Ambients.all.firstOrNull{it.id==sound}?:Ambients.all.first(),
                                         playing=playing,
-                                        onDuration={newMinutes->duration=newMinutes;store.configure(newMinutes);revision++},
+                                        onDuration={newMinutes->duration=newMinutes;store.configure(newMinutes,mode=mode);revision++},
                                         onToggle={
                                             if(current.running)store.pause()else store.start()
                                             revision++
                                         },
-                                        onAbandon={store.abandon();revision++},
+                                        onAbandon={showReset=true},
                                         onSoundSelect={openSound=true},
                                         onSoundToggle={
                                             if(playing){
@@ -174,14 +178,18 @@ class MainActivity:ComponentActivity(){
                                                 Checkbox(checked=task.done,onCheckedChange={store.replaceTask(task.copy(done=it));revision++},colors=CheckboxDefaults.colors(checkedColor=Rose))
                                                 Column(Modifier.weight(1f)){Text(task.title,fontWeight=FontWeight.SemiBold,color=if(task.done)Sub else Ink,textDecoration=if(task.done)TextDecoration.LineThrough else null)
                                                     Text("${task.time}  ·  ${task.duration} min${if(task.remind)"  ·  Reminder" else ""}",color=Sub,fontSize=11.sp)}
-                                                Icon(Icons.Rounded.Edit,null,tint=Sub,modifier=Modifier.size(17.dp))
+                                                if(!task.done)IconButton(enabled=!current.running && left==current.durationMinutes*60_000L,onClick={
+                                                    store.configure(task.duration,task.id,"focus");mode="focus";intention=task.title;store.setIntention(task.title);store.start();revision++;page=0
+                                                }){Icon(Icons.Rounded.PlayCircle,"Focus on ${task.title}",tint=Rose)}
                                             }
                                         }
                                     }
                                     Button(onClick={adding=true},modifier=Modifier.fillMaxWidth().height(52.dp),shape=RoundedCornerShape(16.dp)){Icon(Icons.Rounded.Add,null);Spacer(Modifier.width(8.dp));Text("Plan something")}
                                 }
                                 2->{
-                                    Header("Progress, softly.","Consistency is a practice.")
+                                    Header("Every minute matters.","A gentler look at how far you’ve come.")
+                                    val streak=FocusStats.streak(logs.map{Instant.ofEpochMilli(it.at).atZone(ZoneId.systemDefault()).toLocalDate()},LocalDate.now())
+                                    Surface(shape=RoundedCornerShape(24.dp),color=Blush){Row(Modifier.fillMaxWidth().padding(20.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Rounded.LocalFireDepartment,null,tint=Rose,modifier=Modifier.size(32.dp));Spacer(Modifier.width(14.dp));Column{Text("$streak day streak",fontSize=23.sp,fontWeight=FontWeight.Bold,color=Ink);Text("Small steps. A steady rhythm.",fontSize=12.sp,color=Sub)}}}
                                     Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){
                                         MiniMetric("${today} min","TODAY",Modifier.weight(1f))
                                         MiniMetric("${total} min","ALL TIME",Modifier.weight(1f))
@@ -213,6 +221,16 @@ class MainActivity:ComponentActivity(){
                                             Text("Small steps become chapters",fontSize=18.sp,fontWeight=FontWeight.Bold,color=Ink)
                                             TurtleAtelier(stage,Modifier.fillMaxWidth().height(195.dp))
                                             Text("Your companion evolves only after completed focus sessions.",color=Sub,fontSize=13.sp)
+                                        }
+                                    }
+                                    if(logs.isNotEmpty()){
+                                        Text("Recent moments",fontSize=20.sp,fontWeight=FontWeight.Bold,color=Ink)
+                                        logs.takeLast(10).reversed().forEach{log->
+                                            Surface(shape=RoundedCornerShape(18.dp),color=Color.White){Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically){
+                                                Icon(Icons.Rounded.CheckCircle,null,tint=Rose);Spacer(Modifier.width(12.dp))
+                                                Column(Modifier.weight(1f)){Text(log.intention.ifBlank{"A moment of focus"},fontWeight=FontWeight.SemiBold,color=Ink,maxLines=2,overflow=TextOverflow.Ellipsis);Text(Instant.ofEpochMilli(log.at).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("d MMM · HH:mm")),fontSize=11.sp,color=Sub)}
+                                                Text("${log.minutes}m",fontWeight=FontWeight.Bold,color=Rose)
+                                            }}
                                         }
                                     }
                                 }
@@ -257,14 +275,16 @@ class MainActivity:ComponentActivity(){
                                     Surface(shape=RoundedCornerShape(22.dp),color=Color.White){
                                         Column(Modifier.padding(19.dp)){Text("Private by design",fontWeight=FontWeight.Bold,fontSize=17.sp);Spacer(Modifier.height(7.dp));Text("Your plans, focus history and turtle live on this device. No accounts, cloud backup, analytics trackers or AI.",color=Sub,fontSize=13.sp)}
                                     }
-                                    Text("STAYCALM · VERSION 2.0",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
+                                    Text("STAYCALM · BLOOM EDITION 3.0",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
                                 }
                             }
                             Spacer(Modifier.height(24.dp))
                         }
+                        }
                     }
                 }
-            }
+            if(showReset)AlertDialog(onDismissRequest={showReset=false},title={Text("End this moment?")},text={Text("This session’s unfinished minutes won’t count toward your progress.")},confirmButton={TextButton(onClick={store.abandon();revision++;showReset=false}){Text("End session")}},dismissButton={TextButton(onClick={showReset=false}){Text("Keep going")}})
+            if(completion!=null)AlertDialog(onDismissRequest={store.dismissCompletion();completion=null},icon={Icon(Icons.Rounded.LocalFlorist,null,tint=Rose)},title={Text(if(mode=="focus")"A little more bloomed." else "Welcome back.")},text={Text(completion.orEmpty())},confirmButton={TextButton(onClick={store.dismissCompletion();completion=null;mode=if(mode=="focus")"break" else "focus";store.configure(if(mode=="break")5 else 25,mode=mode);revision++}){Text(if(mode=="focus")"Take a 5-minute break" else "Back to focus")}},dismissButton={TextButton(onClick={store.dismissCompletion();completion=null}){Text("Lovely")}})
             if(openSound)AlertDialog(onDismissRequest={openSound=false},title={Text("Find your atmosphere")},text={
                 Column(Modifier.heightIn(max=455.dp).verticalScroll(rememberScrollState())){
                     Ambients.all.forEach {ambient->
@@ -288,6 +308,7 @@ class MainActivity:ComponentActivity(){
                     else store.replaceTask(old.copy(title=title,date=date.toString(),time=time,duration=duration,remind=remind))
                     selectedDate=date;revision++;adding=false;editTask=null
                 },onDelete={item->store.deleteTask(item);revision++;editTask=null;adding=false})
+            }
             }
         }
     }
@@ -318,7 +339,7 @@ class MainActivity:ComponentActivity(){
     var remind by remember(item){mutableStateOf(item?.remind?:true)}
     val context=androidx.compose.ui.platform.LocalContext.current
     AlertDialog(onDismissRequest=onDismiss,title={Text(if(item==null)"New intention" else "Edit intention",fontWeight=FontWeight.Bold)},text={
-        Column(verticalArrangement=Arrangement.spacedBy(12.dp)){
+        Column(Modifier.heightIn(max=460.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)){
             OutlinedTextField(title,{title=it},label={Text("What will you work on?")},singleLine=true,modifier=Modifier.fillMaxWidth())
             OutlinedButton(onClick={
                 DatePickerDialog(context,{_,year,month,day->date=LocalDate.of(year,month+1,day)},date.year,date.monthValue-1,date.dayOfMonth).show()

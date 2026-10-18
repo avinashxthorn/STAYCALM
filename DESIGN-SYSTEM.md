@@ -1,44 +1,34 @@
-# STAYCALM · Design & Engineering Specification
+# STAYCALM · Bloom edition
 
-STAYCALM is a private, offline Android study companion built around **one obvious primary action: begin focusing**.
+A native Compose interface with a pink-only accent palette. The focus screen puts the timer and its primary action first, followed by an intention, daily progress, offline sound, and the growing companion.
 
-## Design direction
+## Visual system
 
-- **Aesthetic:** quiet editorial, premium utilitarian, minimal movement, not kawaii.
-- **Colors:** ink #211C26, secondary plum #3A2C40, warm off-white #F9F5F6, brand rose #C75C81, focus-success green #477B6E.
-- **Typography:** Manrope, bundled at build time under SIL OFL; large 30sp hero header and 48sp timer figures. Uppercase labels are secondary and never the primary heading.
-- **Composition:** place the most important state in a single immersive dark session surface. Put duration and action together. Turtle and audio become supporting panels, not distractions.
-- **Interaction:** high-contrast 58dp primary touch target, buttons never masquerading as labels, animation only where state changes.
-- **Accessibility:** clear textual state alongside color, readable label hierarchy, avoid essential meaning conveyed by animation alone, device font scaling via sp.
+- Background: blush white `#FFF8FA`; cards: white and pale rose `#FCE8EE`.
+- Primary controls: deep rose `#AC345F`; text: plum rose `#542536`; secondary text: `#88616F`.
+- Manrope is bundled offline and applied to every Material typography role, including dialogs.
+- Large numeric timer uses tabular figures. Timer labels round up to avoid immediately losing a displayed second.
+- Rounded cards use 18–32 dp radii; primary actions are 58 dp high; duration controls are 48 dp high.
+- Circular timer uses minute marks, a moving progress point, and a 450 ms interpolation. Pages crossfade in 220 ms. Native Compose animations follow the system motion scale.
+- Companion artwork remains vector-based and uses rose shell, flippers, and accents. Evolution is based only on completed focus minutes.
 
-## Inspiration studied
+## Behavior
 
-1. [Android Material 3 guidelines](https://developer.android.com/develop/ui/compose/designsystems/material3), type ramps and accessible surface roles.
-2. [Micheal-Jiaming/Pomodoro-timer-Android](https://github.com/Micheal-Jiaming/Pomodoro-timer-Android), offline timer design with a deadline-derived countdown rather than decrementing a ticking counter.
-3. [MartynasCirvinskas/FocusBee](https://github.com/MartynasCirvinskas/FocusBee), Kotlin TimerViewModel, foreground notification architecture, separate settings persistence.
-4. [adnanrangrej/Focus-Modes-App](https://github.com/adnanrangrej/Focus-Modes-App), architecture and app-blocking OEM limitations.
-5. [Android alarm scheduling guidance](https://developer.android.com/develop/background-work/services/alarms) and [Android 15 DND changes](https://developer.android.com/about/versions/15/behavior-changes-15).
+Focus and break modes use the same persisted timer. Breaks never add focus minutes or evolve the companion. Selecting a mode or duration is disabled during running or partially completed sessions. Ending a session requires confirmation.
 
-References are for study; **no third-party focus app source is copied into STAYCALM**.
+Intentions are stored locally and copied into completed session history. Planner tasks can start a focus session directly when the timer is idle. Completing a session does not automatically mark its task done: studying a task for a session does not necessarily finish the task.
 
-## Timer contract
+Completion persists a message and the reset timer atomically with the log; reopening the app shows the summary. A short break is offered but starts only when the user taps Start break.
 
-Session state is persisted. Current remaining time is always computed from a monotonic elapsed-realtime end deadline on the same boot, with a wall-clock fallback after reboot. The render loop does not decrement a stored counter. Session history increments once after the first valid due transition. Pauses, abandoned sessions, and notification restoration are explicit paths.
+The streak counts distinct local dates and remains active until the end of the day following the latest completed session. Future dates do not inflate it.
 
-Alarm timing: when the user grants the special exact-alarm permission, STAYCALM schedules exact completion alarms. Otherwise, Android's inexact scheduling can delay a background notification; the UI timer still calculates the correct remaining time when opened.
+## Timer and alarms
 
-## Egg physics and motion
+New sessions store Android's boot count. Within the same boot, elapsed realtime determines the remaining duration even if the wall clock changes. After reboot, the wall-clock deadline is the fallback. Session alarms use elapsed realtime; exact scheduling requires Android permission and otherwise falls back to inexact delivery. The on-screen timer is not based on counting UI ticks.
 
-Six explicit silhouettes: untouched egg; fracture; separated top/lower shell revealing baby; hatchling; juvenile; adult. A spring with damping ratio and stiffness translates and rotates shell halves when transitioning into the hatch stage. The adult turtle uses restrained idle breathing. This is **procedural spring motion and vector geometry**, not a rigid-body physics engine.
+Planner reminders cancel their previous alarm before rescheduling, including when a date is moved into the past. Notifications require user permission. The ongoing session notification includes Pause. Pausing ambient audio stops its foreground service; playback can be restarted from the app.
 
-## Sound
+## Reference
 
-Seven bundled, documented ambient loops played via Android MediaPlayer in a foreground media playback service. Playback includes offline sound selection, looping, volume, audio focus request and media notification. System playback behavior must be validated on a real phone.
-
-## Privacy and Android restrictions
-
-Local SharedPreferences + JSON are used for the initial offline prototype. No `INTERNET` permission. Android notification-policy access is opt-in; DND is not an app blocker. Exact alarm special access is opt-in. No AI, no account, no cloud.
-
-## Release gate
-
-The source must pass GitHub Actions unit tests and compilation before an APK is presented as buildable. Battery, reboot, notification and media behavior also require a physical Android test device. See `QA-CHECKLIST.md`.
+- Android Compose motion: https://developer.android.com/develop/ui/compose/animation/composables-modifiers
+- Android alarms and permissions: https://developer.android.com/develop/background-work/services/alarms

@@ -27,7 +27,8 @@ class SoundService:Service(){
     private val focusListener=AudioManager.OnAudioFocusChangeListener { state->
         if(state==AudioManager.AUDIOFOCUS_LOSS){setPlayback(false);stopSelf()}
         else if(state==AudioManager.AUDIOFOCUS_LOSS_TRANSIENT){player?.pause();setPlayback(false)}
-        else if(state==AudioManager.AUDIOFOCUS_GAIN){player?.start();setPlayback(true)}
+        else if(state==AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK){player?.setVolume(.15f,.15f)}
+        else if(state==AudioManager.AUDIOFOCUS_GAIN){applyVolume();player?.start();setPlayback(player!=null)}
     }
     override fun onBind(intent:Intent?)=null
     override fun onCreate(){super.onCreate()
@@ -38,7 +39,7 @@ class SoundService:Service(){
         when(intent?.action){
             "stop"->{stopSelf();return START_NOT_STICKY}
             "volume"->{applyVolume();return START_NOT_STICKY}
-            "pause"->{player?.pause();setPlayback(false);return START_NOT_STICKY}
+            "pause"->{setPlayback(false);stopSelf();return START_NOT_STICKY}
         }
         val sound=intent?.getStringExtra("sound")?:"rain"
         val label=Ambients.all.firstOrNull{it.id==sound}?.label?:"Ambient sound"

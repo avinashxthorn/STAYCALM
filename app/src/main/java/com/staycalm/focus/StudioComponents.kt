@@ -1,6 +1,6 @@
-
 package com.staycalm.focus
 
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -14,174 +14,133 @@ import androidx.compose.ui.draw.*
 import androidx.compose.ui.geometry.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.*
+import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
 import kotlin.math.*
 
-private val roseInk=Color(0xFFC75C81)
-private val plumInk=Color(0xFF211C26)
-private val lavenderInk=Color(0xFF3A2C40)
-private val mutedInk=Color(0xFF8D7D8C)
-private val lightRose=Color(0xFFF8EEF1)
-private val turtleGreen=Color(0xFF477B6E)
+internal val roseInk=Color(0xFFAC345F)
+internal val plumInk=Color(0xFF542536)
+internal val mutedInk=Color(0xFF88616F)
+internal val lightRose=Color(0xFFFCE8EE)
+private val turtleGreen=Color(0xFFD37496)
 
 @Composable
 fun StudioFocus(
-    durationMinutes:Int,
-    remainingMs:Long,
-    running:Boolean,
-    totalMinutes:Int,
-    minutesToday:Int,
-    dailyGoal:Int,
-    selectedSound:Ambient,
-    playing:Boolean,
-    onDuration:(Int)->Unit,
-    onToggle:()->Unit,
-    onAbandon:()->Unit,
-    onSoundSelect:()->Unit,
-    onSoundToggle:()->Unit,
-    onOpenPlanner:()->Unit
+    durationMinutes:Int, remainingMs:Long, running:Boolean, totalMinutes:Int,
+    minutesToday:Int, dailyGoal:Int, selectedSound:Ambient, playing:Boolean,
+    mode:String, intention:String, onIntention:(String)->Unit, onMode:(String)->Unit,
+    onDuration:(Int)->Unit, onToggle:()->Unit, onAbandon:()->Unit,
+    onSoundSelect:()->Unit, onSoundToggle:()->Unit, onOpenPlanner:()->Unit
 ){
-    val progress=(1f-remainingMs/(durationMinutes.coerceAtLeast(1)*60_000f)).coerceIn(0f,1f)
+    val progress=FocusClock.progress(remainingMs,durationMinutes)
+    val animatedProgress by animateFloatAsState(progress,tween(450,easing=LinearEasing),label="session progress")
+    val active=running || progress>0f
+    var custom by remember{mutableStateOf(false)}
+    var customMinutes by remember(durationMinutes){mutableFloatStateOf(durationMinutes.toFloat())}
     val stage=Evolution.stage(totalMinutes)
     val next=Evolution.next(totalMinutes)
-    Column(verticalArrangement=Arrangement.spacedBy(19.dp)){
-        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
-            Column(Modifier.weight(1f)){
-                Text("YOUR DAILY STUDIO",fontSize=11.sp,fontWeight=FontWeight.Bold,letterSpacing=2.sp,color=roseInk)
-                Spacer(Modifier.height(6.dp))
-                Text("Make space for focus.",fontSize=30.sp,fontWeight=FontWeight.Bold,color=plumInk,letterSpacing=(-1.1).sp,lineHeight=37.sp)
-            }
-            Surface(onClick=onOpenPlanner,shape=CircleShape,color=Color.White,border=BorderStroke(1.dp,Color(0xFFEADFE3))){
-                Icon(Icons.Rounded.CalendarToday,"Open planner",modifier=Modifier.padding(14.dp).size(20.dp),tint=plumInk)
-            }
+    Column(verticalArrangement=Arrangement.spacedBy(20.dp)){
+        Column{
+            Text("A LITTLE SPACE, JUST FOR YOU",fontSize=10.sp,fontWeight=FontWeight.Bold,letterSpacing=1.8.sp,color=roseInk)
+            Spacer(Modifier.height(6.dp))
+            Text(if(mode=="focus")"Let your focus bloom." else "Rest is part of progress.",fontSize=29.sp,fontWeight=FontWeight.Bold,color=plumInk,letterSpacing=(-1).sp,lineHeight=36.sp)
         }
-        Surface(shape=RoundedCornerShape(30.dp),color=plumInk){
-            Column(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(plumInk,lavenderInk)))
-                .padding(horizontal=23.dp,vertical=23.dp),horizontalAlignment=Alignment.CenterHorizontally){
-                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween){
-                    Row(verticalAlignment=Alignment.CenterVertically){
-                        Box(Modifier.size(8.dp).background(if(running)Color(0xFF88C5AC) else Color(0xFFD29BAE),CircleShape))
-                        Spacer(Modifier.width(9.dp))
-                        Text(if(running)"IN SESSION" else "DEEP WORK",fontSize=11.sp,fontWeight=FontWeight.Bold,letterSpacing=1.7.sp,color=Color(0xFFE9D9E2))
-                    }
-                    Text(if(running)"Stay present" else "Ready when you are",fontSize=11.sp,color=Color(0xFFB8A3B5))
-                }
-                Spacer(Modifier.height(28.dp))
-                Box(contentAlignment=Alignment.Center,modifier=Modifier.size(252.dp)){
-                    Canvas(Modifier.fillMaxSize()){
-                        val center=this.center
-                        val radius=size.minDimension/2.0f-15.dp.toPx()
-                        drawCircle(Brush.radialGradient(listOf(Color(0xFF865467).copy(alpha=.32f),Color.Transparent),center=center,radius=radius*1.28f),radius=radius*1.23f,center=center)
-                        drawCircle(Color.White.copy(alpha=.11f),radius=radius,center=center,style=Stroke(width=7.dp.toPx()))
-                        drawArc(brush=Brush.sweepGradient(colors=listOf(Color(0xFFFFA7C1),roseInk,Color(0xFFDD789B))),startAngle=-90f,sweepAngle=360f*progress,useCenter=false,topLeft=Offset(center.x-radius,center.y-radius),size=Size(radius*2,radius*2),style=Stroke(width=8.dp.toPx(),cap=StrokeCap.Round))
-                    }
-                    Column(horizontalAlignment=Alignment.CenterHorizontally){
-                        Text("%02d:%02d".format(remainingMs/60_000,(remainingMs/1000)%60),fontSize=48.sp,letterSpacing=(-2).sp,fontWeight=FontWeight.Medium,color=Color.White)
-                        Spacer(Modifier.height(8.dp))
-                        Text(if(running)"ONE THING AT A TIME" else "YOUR TIME IS YOURS",fontSize=10.sp,fontWeight=FontWeight.SemiBold,letterSpacing=1.5.sp,color=Color(0xFFC4AFBE))
-                    }
-                }
-                Spacer(Modifier.height(22.dp))
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
-                    listOf(15,25,45,60).forEach {minutes ->
-                        val active=durationMinutes==minutes
-                        Surface(
-                            onClick={if(!running)onDuration(minutes)},
-                            modifier=Modifier.weight(1f).height(42.dp),
-                            shape=RoundedCornerShape(13.dp),
-                            color=if(active)Color(0xFFF5CFDB) else Color.White.copy(alpha=.08f),
-                            border=if(active)null else BorderStroke(1.dp,Color.White.copy(alpha=.11f))
-                        ){
-                            Box(contentAlignment=Alignment.Center){
-                                Text(minutes.toString()+"m",fontSize=13.sp,fontWeight=FontWeight.Bold,color=if(active)plumInk else Color.White.copy(alpha=.85f))
-                            }
+        Surface(shape=RoundedCornerShape(32.dp),color=Color(0xFFFFF6F9),border=BorderStroke(1.dp,Color(0xFFF2CEDB))){
+            Column(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color(0xFFFFF5F8),Color(0xFFF9DCE7)))).padding(20.dp),horizontalAlignment=Alignment.CenterHorizontally){
+                Row(Modifier.fillMaxWidth().background(Color.White.copy(alpha=.6f),CircleShape).padding(4.dp),horizontalArrangement=Arrangement.spacedBy(4.dp)){
+                    listOf("focus" to "Focus","break" to "Short break").forEach{(id,label)->
+                        val selected=mode==id
+                        val tint by animateColorAsState(if(selected)roseInk else Color.Transparent,label="mode selection")
+                        Surface(onClick={onMode(id)},enabled=!active,modifier=Modifier.weight(1f).height(46.dp),shape=CircleShape,color=tint){
+                            Box(contentAlignment=Alignment.Center){Text(label,color=if(selected)Color.White else mutedInk,fontSize=13.sp,fontWeight=FontWeight.SemiBold)}
                         }
                     }
                 }
-                Spacer(Modifier.height(20.dp))
-                Button(
-                    onClick=onToggle,
-                    modifier=Modifier.fillMaxWidth().height(58.dp),
-                    shape=RoundedCornerShape(18.dp),
-                    colors=ButtonDefaults.buttonColors(containerColor=roseInk,contentColor=Color.White)
-                ){
+                Spacer(Modifier.height(22.dp))
+                Box(Modifier.fillMaxWidth().heightIn(max=270.dp).aspectRatio(1f),contentAlignment=Alignment.Center){
+                    Canvas(Modifier.fillMaxSize().clearAndSetSemantics{}){
+                        val radius=size.minDimension*.44f
+                        drawCircle(Color.White.copy(alpha=.38f),radius=radius*.87f)
+                        drawCircle(Color(0xFFEFC0D1),radius=radius,style=Stroke(5.dp.toPx()))
+                        for(i in 0 until 60){
+                            val a=(i*6-90)*PI.toFloat()/180f
+                            val r=radius-14.dp.toPx()
+                            val length=if(i%5==0)7.dp.toPx() else 3.dp.toPx()
+                            drawLine(Color(0xFFCC8CA3).copy(alpha=if(i%5==0).7f else .35f),center+Offset(cos(a)*r,sin(a)*r),center+Offset(cos(a)*(r-length),sin(a)*(r-length)),2f)
+                        }
+                        drawArc(roseInk,-90f,360f*animatedProgress,false,Offset(center.x-radius,center.y-radius),Size(radius*2,radius*2),style=Stroke(5.dp.toPx(),cap=StrokeCap.Round))
+                        val angle=(animatedProgress*360-90)*PI.toFloat()/180f
+                        drawCircle(roseInk,6.dp.toPx(),center+Offset(cos(angle)*radius,sin(angle)*radius))
+                    }
+                    Column(horizontalAlignment=Alignment.CenterHorizontally){
+                        Icon(if(mode=="focus")Icons.Rounded.LocalFlorist else Icons.Rounded.Coffee,null,tint=roseInk,modifier=Modifier.size(24.dp))
+                        Spacer(Modifier.height(8.dp))
+                        Text(FocusClock.displayTime(remainingMs),fontSize=49.sp,fontWeight=FontWeight.SemiBold,letterSpacing=(-2).sp,color=plumInk,style=TextStyle(fontFeatureSettings="tnum"))
+                        Text(if(running)"YOU’RE DOING BEAUTIFULLY" else if(active)"PAUSED • TAKE YOUR TIME" else "ONE MOMENT AT A TIME",fontSize=9.sp,fontWeight=FontWeight.Bold,letterSpacing=1.sp,color=mutedInk)
+                    }
+                }
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)){
+                    (if(mode=="focus")listOf(15,25,45) else listOf(5,10,15)).forEach{minutes->
+                        Surface(onClick={onDuration(minutes)},enabled=!active,modifier=Modifier.weight(1f).height(48.dp),shape=RoundedCornerShape(14.dp),color=if(durationMinutes==minutes)Color.White else Color.White.copy(alpha=.2f),border=if(durationMinutes==minutes)BorderStroke(1.dp,Color(0xFFE8B0C5)) else null){
+                            Box(contentAlignment=Alignment.Center){Text("${minutes}m",fontSize=13.sp,fontWeight=FontWeight.Bold,color=plumInk)}
+                        }
+                    }
+                    IconButton(onClick={custom=true},enabled=!active,modifier=Modifier.size(48.dp)){Icon(Icons.Rounded.Tune,"Custom duration",tint=roseInk)}
+                }
+                Spacer(Modifier.height(16.dp))
+                Button(onClick=onToggle,modifier=Modifier.fillMaxWidth().height(58.dp),shape=RoundedCornerShape(18.dp),colors=ButtonDefaults.buttonColors(containerColor=roseInk)){
                     Icon(if(running)Icons.Rounded.Pause else Icons.Rounded.PlayArrow,null)
-                    Spacer(Modifier.width(11.dp))
-                    Text(if(running)"Pause focus" else if(progress>0f)"Resume your session" else "Start focusing",fontSize=15.sp,fontWeight=FontWeight.Bold)
+                    Spacer(Modifier.width(8.dp))
+                    Text(if(running)"Pause session" else if(active)"Resume session" else if(mode=="break")"Start break" else "Start focus",fontSize=16.sp,fontWeight=FontWeight.Bold)
                 }
-                if(running||progress>0f){
-                    TextButton(onClick=onAbandon){Text("End session without saving",fontSize=12.sp,color=Color(0xFFE2BFCD))}
-                }
+                AnimatedVisibility(active){TextButton(onClick=onAbandon){Text("End session",color=roseInk)}}
             }
         }
-        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)){
-            StudioMetric("TODAY",minutesToday.toString()+" min",Modifier.weight(1f))
-            StudioMetric("YOUR GOAL",dailyGoal.toString()+" min",Modifier.weight(1f))
+        if(mode=="focus"){
+            OutlinedTextField(value=intention,onValueChange={onIntention(it.take(120))},enabled=!active,label={Text("What deserves your attention?")},placeholder={Text("One small intention…")},leadingIcon={Icon(Icons.Rounded.EditNote,null,tint=roseInk)},singleLine=true,shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth())
         }
-        Surface(shape=RoundedCornerShape(25.dp),color=Color.White,border=BorderStroke(1.dp,Color(0xFFF0E6E9))){
-            Column(Modifier.fillMaxWidth().padding(18.dp)){
-                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
-                    Column(Modifier.weight(1f)){
-                        Text("YOUR COMPANION",fontSize=10.sp,fontWeight=FontWeight.Bold,letterSpacing=1.5.sp,color=mutedInk)
-                        Spacer(Modifier.height(5.dp))
-                        Text(Evolution.title(stage),fontSize=19.sp,fontWeight=FontWeight.Bold,color=plumInk)
-                    }
-                    Surface(shape=RoundedCornerShape(9.dp),color=lightRose){
-                        Text("STAGE "+(stage+1).toString()+" / 6",modifier=Modifier.padding(horizontal=10.dp,vertical=7.dp),fontSize=10.sp,fontWeight=FontWeight.Bold,color=roseInk)
-                    }
+        Surface(shape=RoundedCornerShape(22.dp),color=Color.White,border=BorderStroke(1.dp,lightRose)){
+            Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+                Row(verticalAlignment=Alignment.CenterVertically){
+                    Surface(color=lightRose,shape=CircleShape){Icon(Icons.Rounded.WbSunny,null,tint=roseInk,modifier=Modifier.padding(10.dp).size(21.dp))}
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)){Text("Your daily bloom",fontWeight=FontWeight.Bold,color=plumInk);Text("${minutesToday} of ${dailyGoal} minutes",fontSize=12.sp,color=mutedInk)}
+                    Text("${(minutesToday*100/dailyGoal.coerceAtLeast(1)).coerceAtMost(100)}%",fontSize=20.sp,fontWeight=FontWeight.Bold,color=roseInk)
                 }
-                TurtleAtelier(stage,Modifier.fillMaxWidth().height(174.dp))
-                val thresholds=listOf(0,30,90,180,360,720)
-                val previous=thresholds[stage]
-                val growth=if(next==null)1f else ((totalMinutes-previous).toFloat()/(next-previous)).coerceIn(0f,1f)
-                LinearProgressIndicator(progress={growth},modifier=Modifier.fillMaxWidth().height(5.dp).clip(CircleShape),color=roseInk,trackColor=lightRose)
-                Spacer(Modifier.height(9.dp))
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
-                    Text(totalMinutes.toString()+" total focus minutes",fontSize=11.sp,color=mutedInk)
-                    Text(if(next==null)"Fully evolved" else (next-totalMinutes).toString()+" min to evolve",fontSize=11.sp,fontWeight=FontWeight.Bold,color=roseInk)
-                }
+                LinearProgressIndicator(progress={(minutesToday.toFloat()/dailyGoal.coerceAtLeast(1)).coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),color=roseInk,trackColor=lightRose)
             }
         }
-        Surface(shape=RoundedCornerShape(23.dp),color=Color.White,border=BorderStroke(1.dp,Color(0xFFF0E6E9))){
-            Column(Modifier.padding(18.dp)){
-                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
-                    Column(Modifier.weight(1f)){
-                        Text("SOUND STUDIO",fontSize=10.sp,fontWeight=FontWeight.Bold,letterSpacing=1.5.sp,color=mutedInk)
-                        Spacer(Modifier.height(5.dp))
-                        Text(selectedSound.label,fontSize=19.sp,fontWeight=FontWeight.Bold,color=plumInk)
-                        Text(selectedSound.detail,fontSize=12.sp,color=mutedInk)
-                    }
-                    IconButton(onClick=onSoundToggle,modifier=Modifier.size(50.dp)){
-                        Icon(if(playing)Icons.Rounded.PauseCircleFilled else Icons.Rounded.PlayCircleFilled,
-                            if(playing)"Pause sound" else "Play sound",tint=roseInk,modifier=Modifier.size(39.dp))
-                    }
+        Surface(shape=RoundedCornerShape(22.dp),color=Color.White,border=BorderStroke(1.dp,lightRose)){
+            Row(Modifier.fillMaxWidth().padding(14.dp),verticalAlignment=Alignment.CenterVertically){
+                Surface(onClick=onSoundSelect,color=lightRose,shape=RoundedCornerShape(14.dp)){
+                    Icon(Icons.Rounded.GraphicEq,"Choose soundscape",tint=roseInk,modifier=Modifier.padding(14.dp).size(24.dp))
                 }
-                HorizontalDivider(color=Color(0xFFF1E7EB),modifier=Modifier.padding(vertical=12.dp))
-                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
-                    Icon(Icons.Rounded.GraphicEq,null,tint=roseInk,modifier=Modifier.size(21.dp))
-                    Spacer(Modifier.width(9.dp))
-                    Text("Seven offline soundscapes",fontSize=12.sp,color=mutedInk,modifier=Modifier.weight(1f))
-                    TextButton(onClick=onSoundSelect){Text("Browse sounds",fontWeight=FontWeight.Bold,fontSize=12.sp)}
+                Column(Modifier.weight(1f).clickable(onClick=onSoundSelect).padding(horizontal=12.dp)){
+                    Text(selectedSound.label,fontWeight=FontWeight.Bold,color=plumInk)
+                    Text(if(playing)"Playing · tap to explore" else "Soundscapes · tap to explore",fontSize=11.sp,color=mutedInk)
                 }
+                IconButton(onClick=onSoundToggle){Icon(if(playing)Icons.Rounded.PauseCircleFilled else Icons.Rounded.PlayCircleFilled,if(playing)"Pause sound" else "Play sound",tint=roseInk,modifier=Modifier.size(36.dp))}
             }
         }
-        Text("FOCUS IS THE PRACTICE. PROGRESS IS THE REWARD.",fontSize=9.sp,letterSpacing=1.1.sp,color=mutedInk,modifier=Modifier.fillMaxWidth(),textAlign=TextAlign.Center)
+        Surface(shape=RoundedCornerShape(26.dp),color=lightRose){
+            Column(Modifier.fillMaxWidth().padding(20.dp)){
+                Row(verticalAlignment=Alignment.CenterVertically){
+                    Column(Modifier.weight(1f)){Text("GROW TOGETHER",fontSize=9.sp,fontWeight=FontWeight.Bold,letterSpacing=1.5.sp,color=roseInk);Text(Evolution.title(stage),fontSize=18.sp,fontWeight=FontWeight.Bold,color=plumInk)}
+                    Text("${stage+1}/6",fontSize=12.sp,color=roseInk,fontWeight=FontWeight.Bold)
+                }
+                TurtleAtelier(stage,Modifier.fillMaxWidth().height(170.dp).semantics{contentDescription="Pink turtle companion, stage ${stage+1} of 6"})
+                Text(if(next==null)"Fully grown. Look how far you’ve come." else "${next-totalMinutes} more focus minutes to grow",fontSize=12.sp,color=mutedInk)
+            }
+        }
+        OutlinedButton(onClick=onOpenPlanner,modifier=Modifier.fillMaxWidth().height(52.dp),shape=RoundedCornerShape(18.dp),border=BorderStroke(1.dp,Color(0xFFE8C5D2))){Icon(Icons.Rounded.CalendarToday,null);Spacer(Modifier.width(10.dp));Text("Make a little plan")}
     }
+    if(custom)AlertDialog(onDismissRequest={custom=false},title={Text("Your pace, your timer")},text={
+        Column{Text("${customMinutes.roundToInt()} minutes",fontSize=24.sp,color=roseInk);Slider(value=customMinutes.coerceIn(5f,180f),onValueChange={customMinutes=(it/5).roundToInt()*5f},valueRange=5f..180f,steps=34)}
+    },confirmButton={TextButton(onClick={onDuration(customMinutes.roundToInt());custom=false}){Text("Set duration")}},dismissButton={TextButton(onClick={custom=false}){Text("Cancel")}})
 }
-
-@Composable private fun StudioMetric(label:String,value:String,modifier:Modifier){
-    Surface(modifier=modifier,shape=RoundedCornerShape(19.dp),color=Color.White,border=BorderStroke(1.dp,Color(0xFFF0E6E9))){
-        Column(Modifier.padding(horizontal=17.dp,vertical=18.dp)){
-            Text(label,fontSize=10.sp,letterSpacing=1.5.sp,fontWeight=FontWeight.Bold,color=mutedInk)
-            Spacer(Modifier.height(9.dp))
-            Text(value,fontSize=23.sp,fontWeight=FontWeight.Bold,color=plumInk)
-        }
-    }
-}
-
 /** A deterministic six-stage illustration: spring-driven shell fragments at hatching, then scaled
  *  articulated turtle silhouettes. No simulation runs while the screen is not composed. */
 @Composable
@@ -210,13 +169,13 @@ fun TurtleAtelier(stage:Int,modifier:Modifier=Modifier){
         drawOval(Color(0xFFE7DCDF),Offset(-89f,79f),Size(178f,13f))
         drawCircle(Color(0xFFF8EFF1),radius=95f,center=Offset(0f,-3f))
         if(stage<=2){
-            val eggshell=Color(0xFFFFFAF4)
+            val eggshell=Color(0xFFFFF7FA)
             val shade=Color(0xFFEAD5D3)
             if(stage==2){
                 drawOval(turtleGreen,Offset(-32f,-67f+bob),Size(64f,72f))
-                drawCircle(Color(0xFF2A2930),4.5f,Offset(-13f,-42f+bob))
-                drawCircle(Color(0xFF2A2930),4.5f,Offset(13f,-42f+bob))
-                drawArc(Color(0xFF2A2930),12f,150f,false,Offset(-9f,-34f+bob),Size(18f,12f),style=Stroke(width=2f))
+                drawCircle(Color(0xFF632C42),4.5f,Offset(-13f,-42f+bob))
+                drawCircle(Color(0xFF632C42),4.5f,Offset(13f,-42f+bob))
+                drawArc(Color(0xFF632C42),12f,150f,false,Offset(-9f,-34f+bob),Size(18f,12f),style=Stroke(width=2f))
                 drawOval(turtleGreen,Offset(-30f,2f+bob),Size(60f,34f))
             }
             if(stage<=1){
@@ -269,9 +228,9 @@ fun TurtleAtelier(stage:Int,modifier:Modifier=Modifier){
             drawOval(turtleGreen,Offset(-77f,-31f+y),Size(50f,42f))
             drawOval(turtleGreen,Offset(27f,-31f+y),Size(50f,42f))
             drawPath(Path().apply{moveTo(0f,67f+y);lineTo(-10f,87f+y);lineTo(-23f,65f+y);close()},turtleGreen)
-            drawOval(Color(0xFF31594E),Offset(-65f,-45f+y),Size(130f,120f))
-            drawOval(Color(0xFF659483),Offset(-54f,-36f+y),Size(108f,102f))
-            val lines=Color(0xFFA1C2A9)
+            drawOval(Color(0xFFA74B6D),Offset(-65f,-45f+y),Size(130f,120f))
+            drawOval(Color(0xFFE29AB3),Offset(-54f,-36f+y),Size(108f,102f))
+            val lines=Color(0xFFFFCEDD)
             drawLine(lines,Offset(0f,-34f+y),Offset(0f,66f+y),2.8f)
             drawLine(lines,Offset(-52f,14f+y),Offset(52f,14f+y),2.8f)
             drawLine(lines,Offset(-43f,-18f+y),Offset(0f,14f+y),2.8f)
@@ -279,11 +238,11 @@ fun TurtleAtelier(stage:Int,modifier:Modifier=Modifier){
             drawLine(lines,Offset(-42f,43f+y),Offset(0f,14f+y),2.8f)
             drawLine(lines,Offset(42f,43f+y),Offset(0f,14f+y),2.8f)
             drawOval(turtleGreen,Offset(-51f,-95f+y),Size(102f,83f))
-            drawCircle(Color(0xFF272B2B),5f,Offset(-20f,-53f+y))
-            drawCircle(Color(0xFF272B2B),5f,Offset(20f,-53f+y))
+            drawCircle(Color(0xFF632C42),5f,Offset(-20f,-53f+y))
+            drawCircle(Color(0xFF632C42),5f,Offset(20f,-53f+y))
             drawCircle(Color.White,1.9f,Offset(-22f,-55f+y))
             drawCircle(Color.White,1.9f,Offset(18f,-55f+y))
-            drawArc(Color(0xFF2E3B37),10f,160f,false,Offset(-14f,-42f+y),Size(28f,16f),style=Stroke(2f))
+            drawArc(Color(0xFF632C42),10f,160f,false,Offset(-14f,-42f+y),Size(28f,16f),style=Stroke(2f))
         }
     }
 }
