@@ -21,6 +21,7 @@ class AppFlowTest {
         ui.runOnUiThread{
             FocusStore(ui.activity).abandon()
             ui.activity.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE).edit().clear().commit()
+            Personalization(ui.activity).saveProfile("Test Student","Veterinary medicine")
         }
         ui.activityRule.scenario.recreate()
     }
@@ -118,6 +119,43 @@ class AppFlowTest {
         assertTrue(File(context.filesDir,"audio/${imported.localFile}").length()>0)
         library.remove(imported)
         assertFalse(AudioLibrary(context).imported().any{it.id==imported.id})
+    }
+    @Test fun journalFilesStayOnSelectedDayAndCanBeReopened(){
+        val context=ui.activity
+        val journal=StudyJournal(context)
+        val yesterday=LocalDate.now().minusDays(1)
+        val uri=android.net.Uri.parse("android.resource://${context.packageName}/${Ambients.all.first().raw}")
+        val entry=journal.import(yesterday,uri)
+        assertEquals(yesterday.toString(),entry.date)
+        assertTrue(journal.all().any{it.id==entry.id})
+        val reopen=StudyJournal(context).openIntent(entry)
+        assertEquals(android.content.Intent.ACTION_VIEW,reopen.action)
+        assertTrue(reopen.data.toString().startsWith("content://"))
+        journal.remove(entry)
+        assertFalse(journal.all().any{it.id==entry.id})
+    }
+    @Test fun darkModeAndMotivationSettingsPersist(){
+        val preferences=Personalization(ui.activity)
+        preferences.saveProfile("Komi","Vet physiology")
+        preferences.setDarkMode(true)
+        preferences.setInterval(180)
+        val restored=Personalization(ui.activity)
+        assertEquals("Komi",restored.name())
+        assertEquals("Vet physiology",restored.subject())
+        assertTrue(restored.darkMode())
+        assertEquals(180,restored.interval())
+        restored.setInterval(0)
+    }
+    @Test fun firstLaunchAsksForName(){
+        ui.runOnUiThread{
+            ui.activity.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE).edit().remove("profile_ready").commit()
+        }
+        ui.activityRule.scenario.recreate()
+        ui.onNodeWithText("Welcome to your focus space").assertIsDisplayed()
+        ui.onNodeWithText("Your name").performTextInput("Learner")
+        ui.onNodeWithText("Begin my journey").performClick()
+        ui.onNodeWithText("Welcome to your focus space").assertDoesNotExist()
+        ui.runOnUiThread{assertEquals("Learner",Personalization(ui.activity).name())}
     }
     @Test fun playerPausesLoopsAndStopsAtSessionEnd(){
         fun command(action:String,position:Long=0){ui.runOnUiThread{

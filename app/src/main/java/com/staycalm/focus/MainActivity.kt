@@ -41,22 +41,42 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import kotlin.math.*
 
-private val Ink=Color(0xFF542536)
-private val Rose=Color(0xFFAC345F)
-private val Blush=Color(0xFFFCE8EE)
-private val Fog=Color(0xFFFFF8FA)
-private val Sub=Color(0xFF88616F)
-private val Cream=Color(0xFFFFF8FA)
-private val Green=Color(0xFFC76A8C)
-private val DarkGreen=Color(0xFF8D3454)
-private val Border=Color(0xFFEEE5E8)
+private val Ink: Color
+    @Composable get() = if(LocalStaycalmDark.current) Color(0xFFF9E7F0) else Color(0xFF542536)
+private val Rose: Color
+    @Composable get() = if(LocalStaycalmDark.current) Color(0xFFD66A9D) else Color(0xFFAC345F)
+private val Blush: Color
+    @Composable get() = if(LocalStaycalmDark.current) Color(0xFF422634) else Color(0xFFFCE8EE)
+private val Fog: Color
+    @Composable get() = if(LocalStaycalmDark.current) Color(0xFF191219) else Color(0xFFFFF8FA)
+private val Sub: Color
+    @Composable get() = if(LocalStaycalmDark.current) Color(0xFFD4ACBE) else Color(0xFF88616F)
+private val Border: Color
+    @Composable get() = if(LocalStaycalmDark.current) Color(0xFF604052) else Color(0xFFEEE5E8)
 
-private val StaycalmColors=lightColorScheme(primary=Rose,onPrimary=Color.White,background=Fog,onBackground=Ink,surface=Color.White,onSurface=Ink,secondary=Rose,secondaryContainer=Blush,onSecondaryContainer=Ink,primaryContainer=Blush,onPrimaryContainer=Ink,surfaceVariant=Blush,onSurfaceVariant=Sub,outline=Color(0xFFB88B9C),tertiary=Rose)
+private val StaycalmColors=lightColorScheme(primary=Color(0xFFAC345F),onPrimary=Color.White,background=Color(0xFFFFF8FA),onBackground=Color(0xFF542536),surface=Color.White,onSurface=Color(0xFF542536),secondary=Color(0xFFAC345F),secondaryContainer=Color(0xFFFCE8EE),onSecondaryContainer=Color(0xFF542536),primaryContainer=Color(0xFFFCE8EE),onPrimaryContainer=Color(0xFF542536),surfaceVariant=Color(0xFFFCE8EE),onSurfaceVariant=Color(0xFF88616F),outline=Color(0xFFB88B9C),tertiary=Color(0xFFAC345F))
+private val StaycalmDarkColors=darkColorScheme(primary=Color(0xFFD66A9D),onPrimary=Color(0xFF28101B),background=Color(0xFF191219),onBackground=Color(0xFFF9E7F0),surface=Color(0xFF291E29),onSurface=Color(0xFFF9E7F0),secondary=Color(0xFFDA92B0),secondaryContainer=Color(0xFF422634),onSecondaryContainer=Color(0xFFF9E7F0),primaryContainer=Color(0xFF422634),onPrimaryContainer=Color(0xFFF9E7F0),surfaceVariant=Color(0xFF382936),onSurfaceVariant=Color(0xFFD4ACBE),outline=Color(0xFF936B7D),outlineVariant=Color(0xFF604052),tertiary=Color(0xFFE7A1C0))
 
 class MainActivity:ComponentActivity(){
     private lateinit var store:FocusStore
     override fun onCreate(savedInstanceState:android.os.Bundle?){super.onCreate(savedInstanceState);store=FocusStore(this);Notice.channels(this)
         setContent {
+            val personalization=remember{Personalization(this@MainActivity)}
+            val journal=remember{StudyJournal(this@MainActivity)}
+            var isDark by remember{mutableStateOf(personalization.darkMode())}
+            var profileName by remember{mutableStateOf(personalization.name())}
+            var profileSubject by remember{mutableStateOf(personalization.subject())}
+            var draftName by remember{mutableStateOf(personalization.name())}
+            var draftSubject by remember{mutableStateOf(personalization.subject())}
+            var welcomeName by remember{mutableStateOf("")}
+            var welcomeSubject by remember{mutableStateOf("")}
+            var showWelcome by remember{mutableStateOf(!personalization.isReady())}
+            var quoteInterval by remember{mutableIntStateOf(personalization.interval())}
+            var quoteMenuExpanded by remember{mutableStateOf(false)}
+            var journalRevision by remember{mutableIntStateOf(0)}
+            var journalBusy by remember{mutableStateOf(false)}
+            var journalError by remember{mutableStateOf<String?>(null)}
+            var deleteAttachment by remember{mutableStateOf<StudyAttachment?>(null)}
             var page by rememberSaveable{mutableIntStateOf(0)}
             var tick by remember{mutableLongStateOf(0L)}
             var revision by remember{mutableIntStateOf(0)}
@@ -86,6 +106,22 @@ class MainActivity:ComponentActivity(){
             var editTask by remember{mutableStateOf<PlanItem?>(null)}
             var adding by remember{mutableStateOf(false)}
             var selectedDate by remember{mutableStateOf(LocalDate.now())}
+            val documentPicker=rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()){uris->
+                if(uris.isNotEmpty()){
+                    val date=selectedDate
+                    journalBusy=true
+                    scope.launch {
+                        try {
+                            withContext(Dispatchers.IO){uris.forEach{journal.import(date,it)}}
+                        } catch(error:Exception) {
+                            journalError=error.message?:"Unable to save the selected file."
+                        } finally {
+                            journalRevision++
+                            journalBusy=false
+                        }
+                    }
+                }
+            }
             var showReset by remember{mutableStateOf(false)}
             var intention by remember{mutableStateOf(store.intention())}
             var completion by remember{mutableStateOf(store.completion())}
@@ -108,12 +144,15 @@ class MainActivity:ComponentActivity(){
             val left=remember(current,tick){store.remaining(current)}
             val logs=remember(revision){store.logs()}
             val plans=remember(revision){store.tasks()}
+            val journalFiles=remember(selectedDate,journalRevision){journal.all().filter{it.date==selectedDate.toString()}}
+            val archiveDates=remember(journalRevision){journal.all().map{it.date}.toSet()}
             val total=logs.sumOf{it.minutes}
             val stage=Evolution.stage(total)
             val today=logs.filter{Instant.ofEpochMilli(it.at).atZone(ZoneId.systemDefault()).toLocalDate()==LocalDate.now()}.sumOf{it.minutes}
-            MaterialTheme(colorScheme=StaycalmColors,typography=pinkTypography()){
+            CompositionLocalProvider(LocalStaycalmDark provides isDark) {
+            MaterialTheme(colorScheme=if(isDark)StaycalmDarkColors else StaycalmColors,typography=pinkTypography()){
                 Scaffold(containerColor=Fog,bottomBar={
-                    NavigationBar(containerColor=Color.White,tonalElevation=0.dp){
+                    NavigationBar(containerColor=MaterialTheme.colorScheme.surface,tonalElevation=0.dp){
                         listOf(Triple("Focus",Icons.Rounded.Timer,0),Triple("Planner",Icons.Rounded.CalendarMonth,1),Triple("Insights",Icons.Rounded.BarChart,2),Triple("Settings",Icons.Rounded.Tune,3)).forEach{(name,icon,index)->
                             NavigationBarItem(selected=page==index,onClick={page=index},icon={Icon(icon,name)},label={Text(name,fontSize=11.sp)},colors=NavigationBarItemDefaults.colors(selectedIconColor=Rose,selectedTextColor=Rose,indicatorColor=Blush))
                         }
@@ -129,6 +168,13 @@ class MainActivity:ComponentActivity(){
                             Spacer(Modifier.height(8.dp))
                             when(displayedPage){
                                 0->{
+                                    Surface(shape=RoundedCornerShape(23.dp),color=Blush){
+                                        Column(Modifier.fillMaxWidth().padding(18.dp)){
+                                            Text("HELLO, ${profileName.ifBlank{"FRIEND"}.uppercase()} ✨",fontWeight=FontWeight.Bold,fontSize=11.sp,letterSpacing=1.1.sp,color=Rose)
+                                            Spacer(Modifier.height(6.dp))
+                                            Text(StudyQuotes.next(profileName,profileSubject),color=Ink,fontSize=13.sp,lineHeight=20.sp)
+                                        }
+                                    }
                                     StudioFocus(
                                         mode=mode,intention=intention,
                                         onIntention={intention=it;store.setIntention(it)},
@@ -154,7 +200,7 @@ class MainActivity:ComponentActivity(){
                                 1->{
                                     Header("Plan with purpose.","A little structure, more room to breathe.")
                                     val month=YearMonth.from(selectedDate)
-                                    Surface(shape=RoundedCornerShape(25.dp),color=Color.White){
+                                    Surface(shape=RoundedCornerShape(25.dp),color=MaterialTheme.colorScheme.surface){
                                         Column(Modifier.padding(16.dp)){
                                             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween){
                                                 IconButton(onClick={selectedDate=selectedDate.minusMonths(1).withDayOfMonth(1)}){Icon(Icons.Rounded.ChevronLeft,null)}
@@ -170,7 +216,7 @@ class MainActivity:ComponentActivity(){
                                                         if(day==selectedDate)Box(Modifier.size(35.dp).background(Rose,CircleShape))
                                                         Column(horizontalAlignment=Alignment.CenterHorizontally){
                                                             Text("${day.dayOfMonth}",fontSize=13.sp,fontWeight=if(day==selectedDate)FontWeight.Bold else FontWeight.Medium,color=if(day==selectedDate)Color.White else Ink)
-                                                            if(plans.any{it.date==day.toString()})Box(Modifier.padding(top=2.dp).size(4.dp).background(if(day==selectedDate)Color.White else Rose,CircleShape))
+                                                            if(plans.any{it.date==day.toString()} || day.toString() in archiveDates)Box(Modifier.padding(top=2.dp).size(4.dp).background(if(day==selectedDate)Color.White else Rose,CircleShape))
                                                         }
                                                     }
                                                 }
@@ -184,7 +230,7 @@ class MainActivity:ComponentActivity(){
                                     val dayPlans=plans.filter{it.date==selectedDate.toString()}.sortedBy{it.time}
                                     if(dayPlans.isEmpty())EmptyPanel("A fresh page","Add a small intention for this day.")
                                     dayPlans.forEach{task->
-                                        Surface(shape=RoundedCornerShape(19.dp),color=Color.White){
+                                        Surface(shape=RoundedCornerShape(19.dp),color=MaterialTheme.colorScheme.surface){
                                             Row(Modifier.fillMaxWidth().clickable{editTask=task}.padding(13.dp),verticalAlignment=Alignment.CenterVertically){
                                                 Checkbox(checked=task.done,onCheckedChange={store.replaceTask(task.copy(done=it));revision++},colors=CheckboxDefaults.colors(checkedColor=Rose))
                                                 Column(Modifier.weight(1f)){Text(task.title,fontWeight=FontWeight.SemiBold,color=if(task.done)Sub else Ink,textDecoration=if(task.done)TextDecoration.LineThrough else null)
@@ -196,6 +242,13 @@ class MainActivity:ComponentActivity(){
                                         }
                                     }
                                     Button(onClick={adding=true},modifier=Modifier.fillMaxWidth().height(52.dp),shape=RoundedCornerShape(16.dp)){Icon(Icons.Rounded.Add,null);Spacer(Modifier.width(8.dp));Text("Plan something")}
+                                    StudyJournalSection(date=selectedDate,attachments=journalFiles,busy=journalBusy,
+                                        onImport={documentPicker.launch(arrayOf("*/*"))},
+                                        onOpen={entry->
+                                            try{startActivity(Intent.createChooser(journal.openIntent(entry),"Open study file"))}
+                                            catch(error:Exception){journalError=error.message?:"No app is available to open this file."}
+                                        },
+                                        onDelete={deleteAttachment=it})
                                 }
                                 2->{
                                     Header("Every minute matters.","A gentler look at how far you’ve come.")
@@ -209,7 +262,7 @@ class MainActivity:ComponentActivity(){
                                         MiniMetric("${logs.size}","SESSIONS",Modifier.weight(1f))
                                         MiniMetric("${stage+1} / 6","TURTLE STAGE",Modifier.weight(1f))
                                     }
-                                    Surface(shape=RoundedCornerShape(25.dp),color=Color.White){
+                                    Surface(shape=RoundedCornerShape(25.dp),color=MaterialTheme.colorScheme.surface){
                                         Column(Modifier.fillMaxWidth().padding(20.dp)){
                                             Text("Last seven days",fontWeight=FontWeight.Bold,fontSize=18.sp,color=Ink)
                                             Spacer(Modifier.height(26.dp))
@@ -227,7 +280,7 @@ class MainActivity:ComponentActivity(){
                                             }
                                         }
                                     }
-                                    Surface(shape=RoundedCornerShape(23.dp),color=Color.White){
+                                    Surface(shape=RoundedCornerShape(23.dp),color=MaterialTheme.colorScheme.surface){
                                         Column(Modifier.padding(20.dp)){
                                             Text("Small steps become chapters",fontSize=18.sp,fontWeight=FontWeight.Bold,color=Ink)
                                             TurtleAtelier(stage,Modifier.fillMaxWidth().height(195.dp))
@@ -237,7 +290,7 @@ class MainActivity:ComponentActivity(){
                                     if(logs.isNotEmpty()){
                                         Text("Recent moments",fontSize=20.sp,fontWeight=FontWeight.Bold,color=Ink)
                                         logs.takeLast(10).reversed().forEach{log->
-                                            Surface(shape=RoundedCornerShape(18.dp),color=Color.White){Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically){
+                                            Surface(shape=RoundedCornerShape(18.dp),color=MaterialTheme.colorScheme.surface){Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically){
                                                 Icon(Icons.Rounded.CheckCircle,null,tint=Rose);Spacer(Modifier.width(12.dp))
                                                 Column(Modifier.weight(1f)){Text(log.intention.ifBlank{"A moment of focus"},fontWeight=FontWeight.SemiBold,color=Ink,maxLines=2,overflow=TextOverflow.Ellipsis);Text(Instant.ofEpochMilli(log.at).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("d MMM · HH:mm")),fontSize=11.sp,color=Sub)}
                                                 Text("${log.minutes}m",fontWeight=FontWeight.Bold,color=Rose)
@@ -247,7 +300,46 @@ class MainActivity:ComponentActivity(){
                                 }
                                 else->{
                                     Header("Make it yours.","A little control goes a long way.")
-                                    Surface(shape=RoundedCornerShape(23.dp),color=Color.White){
+                                    Surface(shape=RoundedCornerShape(23.dp),color=MaterialTheme.colorScheme.surface){
+                                        Column(Modifier.fillMaxWidth().padding(19.dp),verticalArrangement=Arrangement.spacedBy(11.dp)){
+                                            Text("Your space, ${profileName.ifBlank{"friend"}}",fontWeight=FontWeight.Bold,fontSize=18.sp)
+                                            OutlinedTextField(draftName,{draftName=it.take(40)},label={Text("What should we call you?")},singleLine=true,modifier=Modifier.fillMaxWidth())
+                                            OutlinedTextField(draftSubject,{draftSubject=it.take(65)},label={Text("What are you studying?")},singleLine=true,modifier=Modifier.fillMaxWidth())
+                                            OutlinedButton(onClick={
+                                                personalization.saveProfile(draftName,draftSubject)
+                                                profileName=personalization.name()
+                                                profileSubject=personalization.subject()
+                                            },enabled=draftName.isNotBlank(),modifier=Modifier.fillMaxWidth()){Text("Save my profile")}
+                                            HorizontalDivider()
+                                            Row(verticalAlignment=Alignment.CenterVertically){
+                                                Column(Modifier.weight(1f)){
+                                                    Text("Dark pink mode",fontWeight=FontWeight.SemiBold)
+                                                    Text("A softer screen for evening study.",fontSize=12.sp,color=Sub)
+                                                }
+                                                Switch(checked=isDark,onCheckedChange={isDark=it;personalization.setDarkMode(it)})
+                                            }
+                                            HorizontalDivider()
+                                            Text("Study encouragement",fontWeight=FontWeight.SemiBold)
+                                            Text("Gentle reminders between 8 am and 10 pm, never during a focus session. Android may delay alerts.",fontSize=12.sp,color=Sub)
+                                            Box{
+                                                OutlinedButton(onClick={quoteMenuExpanded=true}){
+                                                    Icon(Icons.Rounded.NotificationsActive,null)
+                                                    Spacer(Modifier.width(8.dp))
+                                                    Text(when(quoteInterval){0->"Motivation off";60->"Every hour";120->"Every 2 hours";else->"Every 3 hours"})
+                                                    Icon(Icons.Rounded.ArrowDropDown,null)
+                                                }
+                                                DropdownMenu(expanded=quoteMenuExpanded,onDismissRequest={quoteMenuExpanded=false}){
+                                                    listOf(0,60,120,180).forEach{minutes->
+                                                        DropdownMenuItem(
+                                                            text={Text(when(minutes){0->"Off";60->"Every hour";120->"Every 2 hours";else->"Every 3 hours"})},
+                                                            onClick={quoteInterval=minutes;personalization.setInterval(minutes);quoteMenuExpanded=false}
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Surface(shape=RoundedCornerShape(23.dp),color=MaterialTheme.colorScheme.surface){
                                         Column(Modifier.fillMaxWidth().padding(19.dp)){
                                             Text("Daily intention",fontSize=17.sp,fontWeight=FontWeight.Bold)
                                             Text("${goal.toInt()} min per day",color=Rose,fontWeight=FontWeight.SemiBold)
@@ -283,10 +375,10 @@ class MainActivity:ComponentActivity(){
                                             Slider(value=volume,onValueChange={volume=it;store.setVolume(it);if(playing)startService(Intent(this@MainActivity,SoundService::class.java).setAction("volume"))})
                                         }
                                     }
-                                    Surface(shape=RoundedCornerShape(22.dp),color=Color.White){
+                                    Surface(shape=RoundedCornerShape(22.dp),color=MaterialTheme.colorScheme.surface){
                                         Column(Modifier.padding(19.dp)){Text("Private by design",fontWeight=FontWeight.Bold,fontSize=17.sp);Spacer(Modifier.height(7.dp));Text("Your plans, focus history and turtle live on this device. No accounts, cloud backup, analytics trackers or AI.",color=Sub,fontSize=13.sp)}
                                     }
-                                    Text("STAYCALM · BLOOM EDITION 3.1",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
+                                    Text("STAYCALM · BLOOM EDITION 3.2",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
                                 }
                             }
                             Spacer(Modifier.height(24.dp))
@@ -294,6 +386,40 @@ class MainActivity:ComponentActivity(){
                         }
                     }
                 }
+            if(showWelcome)AlertDialog(
+                onDismissRequest={},
+                icon={Icon(Icons.Rounded.LocalFlorist,null,tint=Rose)},
+                title={Text("Welcome to your focus space")},
+                text={
+                    Column(verticalArrangement=Arrangement.spacedBy(12.dp)){
+                        Text("Make STAYCALM yours. Your name and study goal stay on this device.")
+                        OutlinedTextField(welcomeName,{welcomeName=it.take(40)},label={Text("Your name")},singleLine=true)
+                        OutlinedTextField(welcomeSubject,{welcomeSubject=it.take(65)},label={Text("What are you studying?")},singleLine=true)
+                    }
+                },
+                confirmButton={Button(enabled=welcomeName.isNotBlank(),onClick={
+                    personalization.saveProfile(welcomeName,welcomeSubject)
+                    profileName=personalization.name()
+                    profileSubject=personalization.subject()
+                    draftName=profileName
+                    draftSubject=profileSubject
+                    showWelcome=false
+                }){Text("Begin my journey")}}
+            )
+            if(deleteAttachment!=null)AlertDialog(
+                onDismissRequest={deleteAttachment=null},
+                title={Text("Delete this saved file?")},
+                text={Text("This removes the private copy from your work archive. The original file stays untouched.")},
+                confirmButton={TextButton(onClick={
+                    deleteAttachment?.let{journal.remove(it)}
+                    journalRevision++
+                    deleteAttachment=null
+                }){Text("Delete file")}},
+                dismissButton={TextButton(onClick={deleteAttachment=null}){Text("Cancel")}}
+            )
+            if(journalError!=null)AlertDialog(onDismissRequest={journalError=null},
+                title={Text("Work archive")},text={Text(journalError.orEmpty())},
+                confirmButton={TextButton(onClick={journalError=null}){Text("OK")}})
             if(showReset)AlertDialog(onDismissRequest={showReset=false},title={Text("End this moment?")},text={Text("This session’s unfinished minutes won’t count toward your progress.")},confirmButton={TextButton(onClick={store.abandon();revision++;showReset=false}){Text("End session")}},dismissButton={TextButton(onClick={showReset=false}){Text("Keep going")}})
             if(completion!=null)AlertDialog(onDismissRequest={store.dismissCompletion();completion=null},icon={Icon(Icons.Rounded.LocalFlorist,null,tint=Rose)},title={Text(if(mode=="focus")"A little more bloomed." else "Welcome back.")},text={Text(completion.orEmpty())},confirmButton={TextButton(onClick={store.dismissCompletion();completion=null;mode=if(mode=="focus")"break" else "focus";store.configure(if(mode=="break")5 else 25,mode=mode);revision++}){Text(if(mode=="focus")"Take a 5-minute break" else "Back to focus")}},dismissButton={TextButton(onClick={store.dismissCompletion();completion=null}){Text("Lovely")}})
             if(importError!=null)AlertDialog(onDismissRequest={importError=null},title={Text("Audio could not be added")},text={Text(importError.orEmpty())},confirmButton={TextButton(onClick={importError=null}){Text("OK")}})
@@ -329,6 +455,7 @@ class MainActivity:ComponentActivity(){
                 },onDelete={item->store.deleteTask(item);revision++;editTask=null;adding=false})
             }
             }
+            }
         }
     }
 }
@@ -338,12 +465,12 @@ class MainActivity:ComponentActivity(){
 }
 @Composable private fun SmallLabel(s:String){Text(s,fontSize=10.sp,letterSpacing=1.3.sp,fontWeight=FontWeight.Bold,color=Sub)}
 @Composable private fun MiniMetric(value:String,label:String,modifier:Modifier=Modifier){
-    Surface(modifier,shape=RoundedCornerShape(20.dp),color=Color.White){
+    Surface(modifier,shape=RoundedCornerShape(20.dp),color=MaterialTheme.colorScheme.surface){
         Column(Modifier.padding(19.dp)){Text(value,fontSize=25.sp,fontWeight=FontWeight.Bold,color=Ink);Spacer(Modifier.height(3.dp));SmallLabel(label)}
     }
 }
 @Composable private fun EmptyPanel(title:String,subtitle:String){
-    Surface(shape=RoundedCornerShape(23.dp),color=Color.White){
+    Surface(shape=RoundedCornerShape(23.dp),color=MaterialTheme.colorScheme.surface){
         Column(Modifier.fillMaxWidth().padding(vertical=34.dp),horizontalAlignment=Alignment.CenterHorizontally){
             Icon(Icons.Rounded.AutoAwesome,null,tint=Rose,modifier=Modifier.size(26.dp));Spacer(Modifier.height(8.dp))
             Text(title,fontWeight=FontWeight.Bold,color=Ink);Text(subtitle,fontSize=12.sp,color=Sub)

@@ -30,7 +30,7 @@ fun FocusMusicPlayer(selected:Ambient,onBrowse:()->Unit,onImport:()->Unit,import
         try{if(action=="play"||action=="next"||action=="previous")context.startForegroundService(intent) else context.startService(intent)}
         catch(_:Exception){AudioPlayback.state=state.copy(error="Playback could not start. Please try again.")}
     }
-    Surface(shape=RoundedCornerShape(24.dp),color=Color.White,border=BorderStroke(1.dp,lightRose)){
+    Surface(shape=RoundedCornerShape(24.dp),color=MaterialTheme.colorScheme.surface,border=BorderStroke(1.dp,lightRose)){
         Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
             Row(verticalAlignment=Alignment.CenterVertically){
                 Surface(color=lightRose,shape=RoundedCornerShape(14.dp)){Icon(Icons.Rounded.Headphones,null,tint=roseInk,modifier=Modifier.padding(13.dp).size(24.dp))}

@@ -227,5 +227,6 @@ class BootReceiver:BroadcastReceiver(){
         val state=store.state()
         if(state.running)FocusAlarms.scheduleFocus(context,store.remaining(state))
         store.tasks().filter{it.remind&&!it.done}.forEach{FocusAlarms.scheduleTask(context,it)}
+        MotivationAlarms.schedule(context)
     }
 }

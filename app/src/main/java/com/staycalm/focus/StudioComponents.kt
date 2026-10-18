@@ -22,9 +22,12 @@ import androidx.compose.ui.unit.*
 import kotlin.math.*
 
 internal val roseInk=Color(0xFFAC345F)
-internal val plumInk=Color(0xFF542536)
-internal val mutedInk=Color(0xFF88616F)
-internal val lightRose=Color(0xFFFCE8EE)
+internal val plumInk: Color
+    @Composable get() = if(LocalStaycalmDark.current) Color(0xFFF9E7F0) else Color(0xFF542536)
+internal val mutedInk: Color
+    @Composable get() = if(LocalStaycalmDark.current) Color(0xFFD4ACBE) else Color(0xFF88616F)
+internal val lightRose: Color
+    @Composable get() = if(LocalStaycalmDark.current) Color(0xFF422634) else Color(0xFFFCE8EE)
 private val turtleGreen=Color(0xFFD37496)
 
 @Composable
@@ -36,6 +39,9 @@ fun StudioFocus(
     onSoundSelect:()->Unit, onOpenPlanner:()->Unit
 ){
     val progress=FocusClock.progress(remainingMs,durationMinutes)
+    val cardGradient = if(LocalStaycalmDark.current)
+        Brush.verticalGradient(listOf(Color(0xFF372333),Color(0xFF281B2B)))
+        else Brush.verticalGradient(listOf(Color(0xFFFFF5F8),Color(0xFFF9DCE7)))
     val animatedProgress by animateFloatAsState(progress,tween(300,easing=LinearEasing),label="session progress")
     val active=running || progress>0f
     var custom by remember{mutableStateOf(false)}
@@ -48,9 +54,9 @@ fun StudioFocus(
             Spacer(Modifier.height(6.dp))
             Text(if(mode=="focus")"Let your focus bloom." else "Rest is part of progress.",fontSize=29.sp,fontWeight=FontWeight.Bold,color=plumInk,letterSpacing=(-1).sp,lineHeight=36.sp)
         }
-        Surface(shape=RoundedCornerShape(32.dp),color=Color(0xFFFFF6F9),border=BorderStroke(1.dp,Color(0xFFF2CEDB))){
-            Column(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color(0xFFFFF5F8),Color(0xFFF9DCE7)))).padding(20.dp),horizontalAlignment=Alignment.CenterHorizontally){
-                Row(Modifier.fillMaxWidth().background(Color.White.copy(alpha=.6f),CircleShape).padding(4.dp),horizontalArrangement=Arrangement.spacedBy(4.dp)){
+        Surface(shape=RoundedCornerShape(32.dp),color=MaterialTheme.colorScheme.surface,border=BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant)){
+            Column(Modifier.fillMaxWidth().background(cardGradient).padding(20.dp),horizontalAlignment=Alignment.CenterHorizontally){
+                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface.copy(alpha=.6f),CircleShape).padding(4.dp),horizontalArrangement=Arrangement.spacedBy(4.dp)){
                     listOf("focus" to "Focus","break" to "Short break").forEach{(id,label)->
                         val selected=mode==id
                         val tint by animateColorAsState(if(selected)roseInk else Color.Transparent,label="mode selection")
@@ -84,7 +90,7 @@ fun StudioFocus(
                 }
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)){
                     (if(mode=="focus")listOf(15,25,45) else listOf(5,10,15)).forEach{minutes->
-                        Surface(onClick={onDuration(minutes)},enabled=!active,modifier=Modifier.weight(1f).height(48.dp),shape=RoundedCornerShape(14.dp),color=if(durationMinutes==minutes)Color.White else Color.White.copy(alpha=.2f),border=if(durationMinutes==minutes)BorderStroke(1.dp,Color(0xFFE8B0C5)) else null){
+                        Surface(onClick={onDuration(minutes)},enabled=!active,modifier=Modifier.weight(1f).height(48.dp),shape=RoundedCornerShape(14.dp),color=if(durationMinutes==minutes)MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surface.copy(alpha=.2f),border=if(durationMinutes==minutes)BorderStroke(1.dp,Color(0xFFE8B0C5)) else null){
                             Box(contentAlignment=Alignment.Center){Text("${minutes}m",fontSize=13.sp,fontWeight=FontWeight.Bold,color=plumInk)}
                         }
                     }
@@ -102,7 +108,7 @@ fun StudioFocus(
         if(mode=="focus"){
             OutlinedTextField(value=intention,onValueChange={onIntention(it.take(120))},enabled=!active,label={Text("What deserves your attention?")},placeholder={Text("One small intention…")},leadingIcon={Icon(Icons.Rounded.EditNote,null,tint=roseInk)},singleLine=true,shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth())
         }
-        Surface(shape=RoundedCornerShape(22.dp),color=Color.White,border=BorderStroke(1.dp,lightRose)){
+        Surface(shape=RoundedCornerShape(22.dp),color=MaterialTheme.colorScheme.surface,border=BorderStroke(1.dp,lightRose)){
             Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
                 Row(verticalAlignment=Alignment.CenterVertically){
                     Surface(color=lightRose,shape=CircleShape){Icon(Icons.Rounded.WbSunny,null,tint=roseInk,modifier=Modifier.padding(10.dp).size(21.dp))}
