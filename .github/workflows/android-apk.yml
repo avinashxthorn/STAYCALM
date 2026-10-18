@@ -51,9 +51,6 @@ jobs:
           disable-animations: true
           script: |
             gradle --no-daemon :app:connectedDebugAndroidTest --console=plain; result=$?; adb pull /sdcard/Android/data/com.staycalm.focus/files/screenshots ui-screenshots || true; exit $result
-      - name: Collect screenshots
-        if: always()
-        run: adb pull /sdcard/Android/data/com.staycalm.focus/files/screenshots ui-screenshots || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -55,7 +55,7 @@ class AppFlowTest {
         ui.onNodeWithText("Resume session").performScrollTo().assertIsDisplayed().performClick()
         ui.onNodeWithText("End session").performScrollTo().performClick()
         ui.onNodeWithText("End this moment?").assertIsDisplayed()
-        ui.onNodeWithText("End session").performClick()
+        ui.onNode(hasText("End session") and hasAnyAncestor(isDialog())).performClick()
         ui.onNodeWithText("Start focus").performScrollTo().assertIsDisplayed()
         ui.runOnUiThread{assertTrue(FocusStore(ui.activity).logs().isEmpty())}
     }
