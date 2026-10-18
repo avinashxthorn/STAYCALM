@@ -59,7 +59,7 @@ private val StaycalmDarkColors=darkColorScheme(primary=Color(0xFFD66A9D),onPrima
 
 class MainActivity:ComponentActivity(){
     private lateinit var store:FocusStore
-    override fun onResume(){super.onResume();if(::store.isInitialized){store.completeIfDue();TimerService.ensureRunning(this)}}
+    override fun onResume(){super.onResume();if(::store.isInitialized){store.completeIfDue();SessionUninstallGuard.releaseIfIdle(this);TimerService.ensureRunning(this)}}
     override fun onCreate(savedInstanceState:android.os.Bundle?){super.onCreate(savedInstanceState);store=FocusStore(this);Notice.channels(this);LauncherIconSwitcher.apply(this,Personalization(this).darkMode())
         setContent {
             val personalization=remember{Personalization(this@MainActivity)}
@@ -127,6 +127,36 @@ class MainActivity:ComponentActivity(){
             var completion by remember{mutableStateOf(store.completion())}
             var mode by remember{mutableStateOf(store.state().mode)}
             var dnd by remember{mutableStateOf(store.enableDnd())}
+            var uninstallProtection by remember{mutableStateOf(store.uninstallProtectionEnabled())}
+            var protectionError by remember{mutableStateOf<String?>(null)}
+            var pendingProtectedStart by rememberSaveable{mutableStateOf(false)}
+            val adminPermission=rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()){
+                if(pendingProtectedStart){
+                    pendingProtectedStart=false
+                    if(SessionUninstallGuard.active(this@MainActivity)){
+                        if(!store.start())protectionError="Could not start this session. Please try again."
+                    }else protectionError="Device Admin was not enabled. Your session has not started. Enable protection when starting, or turn it off in Settings before starting."
+                    SessionUninstallGuard.clearPending(this@MainActivity)
+                    SessionUninstallGuard.releaseIfIdle(this@MainActivity)
+                    revision++
+                }
+            }
+            val startSession:()->Unit={
+                if(SessionUninstallGuard.releasing(this@MainActivity)){
+                    protectionError="Android is finishing the previous session’s protection cleanup. Try starting again in a moment."
+                }else if(store.uninstallProtectionEnabled() && !SessionUninstallGuard.ready(this@MainActivity)){
+                    if(SessionUninstallGuard.beginActivation(this@MainActivity)){
+                        pendingProtectedStart=true
+                        try{adminPermission.launch(SessionUninstallGuard.activationIntent(this@MainActivity))}
+                        catch(_:Exception){
+                            pendingProtectedStart=false
+                            SessionUninstallGuard.clearPending(this@MainActivity)
+                            protectionError="Android could not open Device Admin activation. Your session has not started."
+                        }
+                    }else protectionError="Could not save the protection request. Please try again."
+                }else if(!store.start())protectionError="Could not start this session. Please try again."
+                revision++
+            }
             var lockedTimerNotification by remember{mutableStateOf(store.lockTimerNotification())}
             var goal by remember{mutableFloatStateOf(store.dailyGoal().toFloat())}
             var volume by remember{mutableFloatStateOf(store.soundVolume())}
@@ -218,13 +248,18 @@ class MainActivity:ComponentActivity(){
                                         onImport={audioPicker.launch(arrayOf("audio/*"))},importing=importing,
                                         onDuration={newMinutes->store.configure(newMinutes,mode=mode);duration=store.state().durationMinutes;revision++},
                                         onToggle={
-                                            if(current.running)store.pause()else store.start()
+                                            if(current.running)store.pause()else startSession()
                                             revision++
                                         },
                                         onAbandon={showReset=true},
                                         onSoundSelect={openSound=true},
                                         onOpenPlanner={page=1}
                                     )
+                                    if(uninstallProtection && SessionUninstallGuard.unfinished(current)){
+                                        Text(if(SessionUninstallGuard.active(this@MainActivity))
+                                            "Session uninstall protection active · released after completion or End session"
+                                            else "Uninstall protection is off in Android. Resume to enable it again.",fontSize=12.sp,color=Rose)
+                                    }
                                     Surface(shape=RoundedCornerShape(22.dp),color=Blush){
                                         Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
                                             Text("★ $rewardBalance reward points",fontWeight=FontWeight.Bold,fontSize=18.sp,color=Rose)
@@ -272,7 +307,7 @@ class MainActivity:ComponentActivity(){
                                                 Column(Modifier.weight(1f)){Text(task.title,fontWeight=FontWeight.SemiBold,color=if(task.done)Sub else Ink,textDecoration=if(task.done)TextDecoration.LineThrough else null)
                                                     Text("${task.time}  ·  ${task.duration} min${if(task.remind)"  ·  Reminder" else ""}",color=Sub,fontSize=11.sp)}
                                                 if(!task.done)IconButton(enabled=current.sessionId.isEmpty() && !current.running,onClick={
-                                                    store.configure(task.duration,task.id,"focus");mode="focus";intention=task.title;store.setIntention(task.title);store.start();revision++;page=0
+                                                    store.configure(task.duration,task.id,"focus");mode="focus";intention=task.title;store.setIntention(task.title);startSession();revision++;page=0
                                                 }){Icon(Icons.Rounded.PlayCircle,"Focus on ${task.title}",tint=Rose)}
                                             }
                                         }
@@ -396,6 +431,19 @@ class MainActivity:ComponentActivity(){
                                             Spacer(Modifier.height(12.dp))
                                             Row(verticalAlignment=Alignment.CenterVertically){
                                                 Column(Modifier.weight(1f)){
+                                                    Text("Protect session from uninstall",fontWeight=FontWeight.Bold)
+                                                    Text("Ask for Device Admin when starting. Keep protection through pauses; release after completion or an allowed End session.",fontSize=12.sp,color=Sub)
+                                                }
+                                                Switch(checked=uninstallProtection,enabled=!SessionUninstallGuard.unfinished(current),onCheckedChange={
+                                                    if(store.setUninstallProtectionEnabled(it)){uninstallProtection=it;revision++}
+                                                })
+                                            }
+                                            Text("Android asks permission for each new protected session. Reward points alone do not release protection. Android Settings can always deactivate Device Admin. A foreground countdown stays active during protected timers.",fontSize=11.sp,color=Sub)
+                                            if(SessionUninstallGuard.unfinished(current))Text("Finish or end this session to change uninstall protection.",fontSize=11.sp,color=Rose)
+                                            HorizontalDivider(color=Border)
+                                            Spacer(Modifier.height(12.dp))
+                                            Row(verticalAlignment=Alignment.CenterVertically){
+                                                Column(Modifier.weight(1f)){
                                                     Text("Lock timer notification",fontWeight=FontWeight.Bold)
                                                     Text("Keep the focus or break countdown visible in the background. Dismissed alerts are restored while this is on.",fontSize=12.sp,color=Sub)
                                                 }
@@ -435,7 +483,7 @@ class MainActivity:ComponentActivity(){
                                     Surface(shape=RoundedCornerShape(22.dp),color=MaterialTheme.colorScheme.surface){
                                         Column(Modifier.padding(19.dp)){Text("Private by design",fontWeight=FontWeight.Bold,fontSize=17.sp);Spacer(Modifier.height(7.dp));Text("Your plans, focus history and turtle live on this device. No accounts, cloud backup, analytics trackers or AI.",color=Sub,fontSize=13.sp)}
                                     }
-                                    Text("STAYCALM · BLOOM EDITION 3.5",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
+                                    Text("STAYCALM · BLOOM EDITION 3.6",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
                                 }
                             }
                             Spacer(Modifier.height(24.dp))
@@ -474,6 +522,7 @@ class MainActivity:ComponentActivity(){
                     revision++;showReset=false
                 }){Text("End session")}},dismissButton={TextButton(onClick={showReset=false}){Text("Keep going")}})
             }
+            if(protectionError!=null)AlertDialog(onDismissRequest={protectionError=null},title={Text("Session protection")},text={Text(protectionError.orEmpty())},confirmButton={TextButton(onClick={protectionError=null}){Text("OK")}})
             if(cancellationError!=null)AlertDialog(onDismissRequest={cancellationError=null},title={Text("Session kept")},text={Text(cancellationError.orEmpty())},confirmButton={TextButton(onClick={cancellationError=null}){Text("OK")}})
             if(completion!=null)AlertDialog(onDismissRequest={store.dismissCompletion();completion=null},icon={Icon(Icons.Rounded.LocalFlorist,null,tint=Rose)},title={Text(if(mode=="focus")"A little more bloomed." else "Welcome back.")},text={Text(completion.orEmpty())},confirmButton={TextButton(onClick={store.dismissCompletion();completion=null;mode=if(mode=="focus")"break" else "focus";store.configure(if(mode=="break")5 else 25,mode=mode);revision++}){Text(if(mode=="focus")"Take a 5-minute break" else "Back to focus")}},dismissButton={TextButton(onClick={store.dismissCompletion();completion=null}){Text("Lovely")}})
             if(importError!=null)AlertDialog(onDismissRequest={importError=null},title={Text("Audio could not be added")},text={Text(importError.orEmpty())},confirmButton={TextButton(onClick={importError=null}){Text("OK")}})

@@ -13,13 +13,13 @@ class TimerService : Service() {
     private val pulse = object : Runnable {
         override fun run() {
             val store = FocusStore(this@TimerService)
-            if (store.completeIfDue() || !store.state().running || !store.lockTimerNotification()) {
+            if (store.completeIfDue() || !store.state().running || (!store.lockTimerNotification() && !SessionUninstallGuard.keepTimerAlive(this@TimerService))) {
                 stopSelf()
                 return
             }
             // Android 14+ allows swiping an ongoing alert while unlocked. Restore it,
             // including on devices which do not deliver its delete PendingIntent.
-            if (getSystemService(NotificationManager::class.java).activeNotifications.none { it.id == 1002 }) {
+            if (store.lockTimerNotification() && getSystemService(NotificationManager::class.java).activeNotifications.none { it.id == 1002 }) {
                 val state = store.state()
                 Notice.sessionStarted(this@TimerService, state.endWall, state.mode)
             }
@@ -42,7 +42,7 @@ class TimerService : Service() {
         // Meet the startForegroundService deadline even if pause/completion raced startup.
         startForeground(1002, Notice.sessionNotification(this, state.endWall, state.mode))
         handler.removeCallbacks(pulse)
-        if (!state.running || !store.lockTimerNotification() || store.completeIfDue()) {
+        if (!state.running || (!store.lockTimerNotification() && !SessionUninstallGuard.keepTimerAlive(this@TimerService)) || store.completeIfDue()) {
             stopSelf()
             return START_NOT_STICKY
         }
@@ -71,7 +71,7 @@ class TimerService : Service() {
             val app = context.applicationContext
             mainHandler.post {
                 val store = FocusStore(app)
-                if (!store.state().running || !store.lockTimerNotification()) {
+                if (!store.state().running || (!store.lockTimerNotification() && !SessionUninstallGuard.keepTimerAlive(app))) {
                     // A pending startup must first enter the foreground, then stop itself.
                     // Stopping it before onCreate can otherwise leave Android's timeout armed.
                     activeService?.stopSelf()
@@ -90,7 +90,7 @@ class TimerService : Service() {
                 val store = FocusStore(app)
                 val state = store.state()
                 if (!state.running) return@post
-                if (!store.lockTimerNotification()) {
+                if (!store.lockTimerNotification() && !SessionUninstallGuard.keepTimerAlive(app)) {
                     stop(app)
                     Notice.sessionStarted(app, state.endWall, state.mode)
                     return@post

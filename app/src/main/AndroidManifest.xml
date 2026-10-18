@@ -42,6 +42,12 @@
       android:grantUriPermissions="true">
       <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/journal_paths"/>
     </provider>
+    <receiver android:name=".SessionAdminReceiver" android:exported="true"
+        android:permission="android.permission.BIND_DEVICE_ADMIN"
+        android:label="@string/session_admin_label" android:description="@string/session_admin_description">
+      <meta-data android:name="android.app.device_admin" android:resource="@xml/session_device_admin"/>
+      <intent-filter><action android:name="android.app.action.DEVICE_ADMIN_ENABLED"/></intent-filter>
+    </receiver>
     <receiver android:name=".QuoteReceiver" android:exported="false"/>
     <service android:name=".TimerService" android:exported="false" android:foregroundServiceType="specialUse">
       <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"

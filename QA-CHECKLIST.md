@@ -27,3 +27,12 @@ No finite set of checks can guarantee an app has no defects on every Android dev
 - [ ] Cancelling an already-due session completes it without a charge; breaks never change rewards or allowances.
 - [ ] Locked silent focus and break countdowns appear, restore after dismissal, unlock immediately and disappear on pause/end/completion.
 - [ ] Notification permission denial does not crash; notification settings link opens Android controls.
+
+
+## v3.6 opt-in uninstall protection
+- [ ] Denied Device Admin activation leaves the timer unstarted.
+- [ ] Approved protection applies to focus and break sessions and persists through pause/recreation.
+- [ ] Having points and attempting to change the protection switch do not release an unfinished session.
+- [ ] Completion and successful free/paid cancellation remove Device Admin; blocked cancellation does not.
+- [ ] A new protected session requires approval again after administrator removal finishes.
+- [ ] Android Settings remains accessible for administrator deactivation; no destructive policies are requested.

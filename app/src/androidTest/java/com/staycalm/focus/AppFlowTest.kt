@@ -23,6 +23,7 @@ class AppFlowTest {
             ui.activity.stopService(android.content.Intent(ui.activity,TimerService::class.java))
             Notice.sessionStopped(ui.activity)
             ui.activity.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE).edit().clear().commit()
+            SessionUninstallGuard.releaseIfIdle(ui.activity)
             Personalization(ui.activity).saveProfile("Test Student","Veterinary medicine")
         }
         ui.activityRule.scenario.recreate()
@@ -318,6 +319,78 @@ class AppFlowTest {
             ui.runOnUiThread{FocusStore(ui.activity).pause()}
             ui.waitUntil(5_000){notice()==null}
             ui.runOnUiThread{FocusStore(ui.activity).abandon()}
+        }
+    }
+
+    @Test fun uninstallProtectionRequiresConsentAndReleasesOnlyAfterSessionEnd(){
+        val context=ui.activity
+        val store=FocusStore(context)
+        val prefs=context.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE)
+        fun activateForSession(mode:String="focus"){
+            ui.runOnUiThread{
+                store.configure(60,mode=mode)
+                assertFalse("A protected session must not start without approval",store.start())
+                assertTrue(SessionUninstallGuard.beginActivation(context))
+            }
+            val component=SessionUninstallGuard.component(context).flattenToString()
+            val descriptor=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
+                .executeShellCommand("dpm set-active-admin --user current $component")
+            val output=android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).use{String(it.readBytes())}
+            assertTrue("Android must activate our empty-policy administrator: $output",output.contains("Success"))
+            ui.waitUntil(10_000){SessionUninstallGuard.active(context) && store.state().running}
+        }
+        try{
+            ui.runOnUiThread{
+                assertTrue(store.setUninstallProtectionEnabled(true))
+                store.setLockTimerNotification(false)
+                prefs.edit().putLong("reward_balance",10L).putInt("free_cancellations_used",3).commit()
+            }
+            activateForSession()
+            // Reward balance does not release an unfinished session, nor does pausing.
+            ui.runOnUiThread{
+                store.pause()
+                SessionUninstallGuard.releaseIfIdle(context)
+                assertTrue(SessionUninstallGuard.active(context))
+                assertFalse(store.setUninstallProtectionEnabled(false))
+                assertNotNull(SessionAdminReceiver().onDisableRequested(context,android.content.Intent()))
+                assertEquals(CancellationResult.CHARGED,store.abandon())
+            }
+            ui.waitUntil(10_000){!SessionUninstallGuard.active(context)}
+            assertEquals(9L,store.rewardBalance())
+            activateForSession()
+            // The foreground countdown still exists with notification locking switched off.
+            val manager=context.getSystemService(android.app.NotificationManager::class.java)
+            ui.waitUntil(5_000){manager.activeNotifications.any{it.id==1002}}
+            ui.runOnUiThread{
+                prefs.edit().putLong("end_elapsed",SystemClock.elapsedRealtime()-100)
+                    .putLong("end_wall",System.currentTimeMillis()-100).commit()
+                assertTrue(store.completeIfDue())
+            }
+            ui.waitUntil(10_000){!SessionUninstallGuard.active(context)}
+            assertEquals(10L,store.rewardBalance())
+            activateForSession("break")
+            ui.runOnUiThread{assertEquals(CancellationResult.FREE,store.abandon())}
+            ui.waitUntil(10_000){!SessionUninstallGuard.active(context)}
+            assertEquals(10L,store.rewardBalance())
+            activateForSession()
+            ui.runOnUiThread{
+                prefs.edit().putLong("reward_balance",0L).commit()
+                store.pause()
+                assertEquals(CancellationResult.INSUFFICIENT_POINTS,store.abandon())
+                assertTrue(SessionUninstallGuard.active(context))
+                prefs.edit().putLong("reward_balance",1L).commit()
+                assertEquals(CancellationResult.CHARGED,store.abandon())
+            }
+            ui.waitUntil(10_000){!SessionUninstallGuard.active(context)}
+        }finally{
+            // Keep test failure/retry cleanup independent of the app's cancellation budget.
+            ui.runOnUiThread{
+                prefs.edit().putBoolean("running",false).putString("session_id","")
+                    .remove("session_admin_pending_until").commit()
+                SessionUninstallGuard.releaseIfIdle(context)
+                Notice.sessionStopped(context)
+            }
+            ui.waitUntil(10_000){!SessionUninstallGuard.active(context)}
         }
     }
 

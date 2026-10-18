@@ -55,6 +55,13 @@ class FocusStore(private val context: Context) {
     fun completedMinutes():Int=logs().sumOf{it.minutes}
     fun dailyGoal():Int=prefs.getInt("daily_goal",120)
     fun setDailyGoal(value:Int){prefs.edit().putInt("daily_goal",value.coerceIn(30,360)).apply()}
+    fun uninstallProtectionEnabled():Boolean=prefs.getBoolean("session_uninstall_protection",false)
+    fun setUninstallProtectionEnabled(value:Boolean):Boolean = synchronized(timerLock) {
+        if(SessionUninstallGuard.unfinished(state()))return false
+        val saved=prefs.edit().putBoolean("session_uninstall_protection",value).commit()
+        if(saved && !value){SessionUninstallGuard.clearPending(context);SessionUninstallGuard.releaseIfIdle(context)}
+        saved
+    }
     fun lockTimerNotification():Boolean=prefs.getBoolean("lock_timer_notification",true)
     fun setLockTimerNotification(value:Boolean){
         prefs.edit().putBoolean("lock_timer_notification",value).apply()
@@ -96,18 +103,21 @@ class FocusStore(private val context: Context) {
         val s=state();if(s.running || s.sessionId.isNotEmpty())return
         save(s.copy(durationMinutes=minutes.coerceIn(5,180),remainingMs=minutes.coerceIn(5,180)*60_000L,taskId=taskId,mode=if(mode=="break")"break" else "focus"))
     } }
-    fun start() { synchronized(timerLock) {
-        val s=state();if(s.running)return
+    fun start():Boolean = synchronized(timerLock) {
+        val s=state();if(s.running)return true
+        if(uninstallProtectionEnabled() && !SessionUninstallGuard.ready(context))return false
         val ms=s.remainingMs.coerceAtLeast(1L)
         val next=s.copy(running=true,endElapsed=SystemClock.elapsedRealtime()+ms,
             endWall=System.currentTimeMillis()+ms,bootOrigin=System.currentTimeMillis()-SystemClock.elapsedRealtime(),
             bootCount=Settings.Global.getInt(context.contentResolver,Settings.Global.BOOT_COUNT,-1),
             sessionId=s.sessionId.ifEmpty{UUID.randomUUID().toString()})
-        if(!save(next))return
+        if(!save(next))return false
+        SessionUninstallGuard.clearPending(context)
         FocusAlarms.scheduleFocus(context,ms)
         TimerService.ensureRunning(context)
         if(enableDnd() && next.mode=="focus") FocusDnd.enter(context)
-    } }
+        true
+    }
     fun pause() { synchronized(timerLock) {
         val s=state();if(!s.running)return
         val left=remaining(s)
@@ -120,7 +130,7 @@ class FocusStore(private val context: Context) {
         if(s.running && remaining(s)<=0) {
             return if(completeIfDue()) CancellationResult.COMPLETED else CancellationResult.SAVE_FAILED
         }
-        if(s.sessionId.isEmpty())return CancellationResult.NO_SESSION
+        if(s.sessionId.isEmpty()){SessionUninstallGuard.releaseIfIdle(context);return CancellationResult.NO_SESSION}
         val used=prefs.getInt("free_cancellations_used",0)
         val cost=RewardPolicy.cancellationCost(used,s.mode)
         val balance=rewardBalance()
@@ -132,6 +142,7 @@ class FocusStore(private val context: Context) {
         }
         // The charge, allowance and session reset are one durable transaction.
         if(!editor.commit())return CancellationResult.SAVE_FAILED
+        SessionUninstallGuard.releaseIfIdle(context)
         FocusAlarms.cancelFocus(context);Notice.sessionStopped(context);FocusDnd.exit(context)
         context.stopService(Intent(context,SoundService::class.java))
         if(cost>0) CancellationResult.CHARGED else CancellationResult.FREE
@@ -152,6 +163,7 @@ class FocusStore(private val context: Context) {
                 (if(earned>0) " +$earned reward ${if(earned==1L)"point" else "points"}!" else "")
         } else "Your break is complete. Ready for a fresh start?"
         if(!editor.putString("completion",message).commit())return false
+        SessionUninstallGuard.releaseIfIdle(context)
         FocusAlarms.cancelFocus(context);Notice.sessionStopped(context);FocusDnd.exit(context)
         context.stopService(Intent(context,SoundService::class.java))
         Notice.finished(context,s.durationMinutes,s.mode)
@@ -285,6 +297,7 @@ class BootReceiver:BroadcastReceiver(){
         if(intent.action!=Intent.ACTION_BOOT_COMPLETED && intent.action!=Intent.ACTION_MY_PACKAGE_REPLACED)return
         val store=FocusStore(context)
         store.completeIfDue()
+        SessionUninstallGuard.releaseIfIdle(context)
         val state=store.state()
         if(state.running){
             FocusAlarms.scheduleFocus(context,store.remaining(state))
