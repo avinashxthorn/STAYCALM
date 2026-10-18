@@ -46,7 +46,7 @@ private val Green=Color(0xFF447B65)
 private val DarkGreen=Color(0xFF305C50)
 private val Border=Color(0xFFEEE5E8)
 
-private val theme=lightColorScheme(primary=Rose,onPrimary=Color.White,background=Fog,onBackground=Ink,surface=Color.White,onSurface=Ink,secondary=Green)
+private val StaycalmColors=lightColorScheme(primary=Rose,onPrimary=Color.White,background=Fog,onBackground=Ink,surface=Color.White,onSurface=Ink,secondary=Green)
 
 class MainActivity:ComponentActivity(){
     private lateinit var store:FocusStore
@@ -77,7 +77,7 @@ class MainActivity:ComponentActivity(){
             val stage=Evolution.stage(total)
             val today=logs.filter{Instant.ofEpochMilli(it.at).atZone(ZoneId.systemDefault()).toLocalDate()==LocalDate.now()}.sumOf{it.minutes}
             val titleStyle=FontFamily(Font(com.staycalm.focus.R.font.manrope))
-            MaterialTheme(colorScheme=theme,typography=Typography(
+            MaterialTheme(colorScheme=StaycalmColors,typography=Typography(
                 displayLarge=TextStyle(fontFamily=titleStyle,fontWeight=FontWeight.Bold),
                 headlineLarge=TextStyle(fontFamily=titleStyle,fontWeight=FontWeight.Bold),
                 titleLarge=TextStyle(fontFamily=titleStyle,fontWeight=FontWeight.SemiBold),
@@ -292,7 +292,7 @@ class MainActivity:ComponentActivity(){
             if(adding||editTask!=null){
                 PlanEditor(editTask,selectedDate,onDismiss={adding=false;editTask=null},onSave={title,date,time,duration,remind->
                     val old=editTask
-                    if(old==null)store.addTask(title,date,time,duration,remind)
+                    if(old==null)store.addTask(title,date.toString(),time,duration,remind)
                     else store.replaceTask(old.copy(title=title,date=date.toString(),time=time,duration=duration,remind=remind))
                     selectedDate=date;revision++;adding=false;editTask=null
                 },onDelete={item->store.deleteTask(item);revision++;editTask=null;adding=false})
