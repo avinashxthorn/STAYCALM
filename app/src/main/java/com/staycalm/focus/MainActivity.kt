@@ -247,7 +247,7 @@ private data class Task(val id:Long,val name:String,val done:Boolean)
         if(stage<=2){
             drawOval(Color(0xFFF2DEDA),topLeft=Offset(-67f,-72f+bob),size=androidx.compose.ui.geometry.Size(134f,155f))
             drawOval(Color(0xFFFFF8F3),topLeft=Offset(-56f,-65f+bob),size=androidx.compose.ui.geometry.Size(112f,140f))
-            if(stage>=1){val p=Path().apply{moveTo(-50f,-18f+bob);lineTo(-25f,-35f+bob);lineTo(-13f,-17f+bob);lineTo(4f,-44f+bob);lineTo(23f,-27f+bob);lineTo(52f,-45f+bob)};drawPath(p,rose,style=Stroke(width=3.7f,cap=StrokeCap.Round,join=PathJoin.Round))}
+            if(stage>=1){val p=Path().apply{moveTo(-50f,-18f+bob);lineTo(-25f,-35f+bob);lineTo(-13f,-17f+bob);lineTo(4f,-44f+bob);lineTo(23f,-27f+bob);lineTo(52f,-45f+bob)};drawPath(p,rose,style=Stroke(width=3.7f,cap=StrokeCap.Round,join=StrokeJoin.Round))}
             if(stage>=2){
                 drawOval(moss,Offset(-31f,-55f+bob),androidx.compose.ui.geometry.Size(61f,68f))
                 drawCircle(ink,3.8f,Offset(-12f,-28f+bob));drawCircle(ink,3.8f,Offset(12f,-28f+bob))
