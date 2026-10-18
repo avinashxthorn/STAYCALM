@@ -36,7 +36,7 @@ fun StudioFocus(
     onSoundSelect:()->Unit, onSoundToggle:()->Unit, onOpenPlanner:()->Unit
 ){
     val progress=FocusClock.progress(remainingMs,durationMinutes)
-    val animatedProgress by animateFloatAsState(progress,tween(450,easing=LinearEasing),label="session progress")
+    val animatedProgress by animateFloatAsState(progress,tween(300,easing=LinearEasing),label="session progress")
     val active=running || progress>0f
     var custom by remember{mutableStateOf(false)}
     var customMinutes by remember(durationMinutes){mutableFloatStateOf(durationMinutes.toFloat())}

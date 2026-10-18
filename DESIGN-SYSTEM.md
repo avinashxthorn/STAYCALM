@@ -9,7 +9,7 @@ A native Compose interface with a pink-only accent palette. The focus screen put
 - Manrope is bundled offline and applied to every Material typography role, including dialogs.
 - Large numeric timer uses tabular figures. Timer labels round up to avoid immediately losing a displayed second.
 - Rounded cards use 18–32 dp radii; primary actions are 58 dp high; duration controls are 48 dp high.
-- Circular timer uses minute marks, a moving progress point, and a 450 ms interpolation. Pages crossfade in 220 ms. Native Compose animations follow the system motion scale.
+- Circular timer uses minute marks, a moving progress point, and a 300 ms interpolation between once-per-second deadline samples. Pages crossfade in 220 ms. Native Compose animations follow the system motion scale.
 - Companion artwork remains vector-based and uses rose shell, flippers, and accents. Evolution is based only on completed focus minutes.
 
 ## Behavior

@@ -80,10 +80,10 @@ class MainActivity:ComponentActivity(){
                 completion=store.completion()
                 if(store.logs().size != knownLogCount){knownLogCount=store.logs().size;revision++}
                 playing=getSharedPreferences("staycalm_v2",MODE_PRIVATE).getBoolean("audio_playing",false)
-                delay(450)
+                delay(1000)
             }}
             val current=remember(revision,tick){store.state()}
-            val left=store.remaining(current)
+            val left=remember(current,tick){store.remaining(current)}
             val logs=remember(revision){store.logs()}
             val plans=remember(revision){store.tasks()}
             val total=logs.sumOf{it.minutes}
