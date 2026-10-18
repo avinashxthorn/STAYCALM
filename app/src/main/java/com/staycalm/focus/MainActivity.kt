@@ -128,6 +128,8 @@ class MainActivity:ComponentActivity(){
             var mode by remember{mutableStateOf(store.state().mode)}
             var dnd by remember{mutableStateOf(store.enableDnd())}
             var uninstallProtection by remember{mutableStateOf(store.uninstallProtectionEnabled())}
+            var blockApps by remember{mutableStateOf(store.blockDistractingApps())}
+            var blockerSetup by remember{mutableStateOf(false)}
             var protectionError by remember{mutableStateOf<String?>(null)}
             var pendingProtectedStart by rememberSaveable{mutableStateOf(false)}
             val adminPermission=rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()){
@@ -142,7 +144,9 @@ class MainActivity:ComponentActivity(){
                 }
             }
             val startSession:()->Unit={
-                if(SessionUninstallGuard.releasing(this@MainActivity)){
+                if(store.blockDistractingApps() && store.state().mode=="focus" && !FocusAppBlocker.isEnabled(this@MainActivity)){
+                    blockerSetup=true
+                }else if(SessionUninstallGuard.releasing(this@MainActivity)){
                     protectionError="Android is finishing the previous session’s protection cleanup. Try starting again in a moment."
                 }else if(store.uninstallProtectionEnabled() && !SessionUninstallGuard.ready(this@MainActivity)){
                     if(SessionUninstallGuard.beginActivation(this@MainActivity)){
@@ -255,6 +259,11 @@ class MainActivity:ComponentActivity(){
                                         onSoundSelect={openSound=true},
                                         onOpenPlanner={page=1}
                                     )
+                                    if(blockApps && current.mode=="focus" && SessionUninstallGuard.unfinished(current)){
+                                        Text(if(FocusAppBlocker.isEnabled(this@MainActivity))
+                                            "Instagram, Instagram Lite and YouTube are blocked until this focus session ends."
+                                            else "App blocking needs Accessibility access. Open Settings to enable the STAYCALM blocker.",fontSize=12.sp,color=Rose)
+                                    }
                                     if(uninstallProtection && SessionUninstallGuard.unfinished(current)){
                                         Text(if(SessionUninstallGuard.active(this@MainActivity))
                                             "Session uninstall protection active · released after completion or End session"
@@ -431,6 +440,27 @@ class MainActivity:ComponentActivity(){
                                             Spacer(Modifier.height(12.dp))
                                             Row(verticalAlignment=Alignment.CenterVertically){
                                                 Column(Modifier.weight(1f)){
+                                                    Text("Block distracting apps",fontWeight=FontWeight.Bold)
+                                                    Text("Block Instagram, Instagram Lite and YouTube during unfinished focus sessions, including pauses. They work normally when your session ends.",fontSize=12.sp,color=Sub)
+                                                }
+                                                Switch(checked=blockApps,onCheckedChange={
+                                                    blockApps=it;store.setBlockDistractingApps(it)
+                                                    if(it && !FocusAppBlocker.isEnabled(this@MainActivity))blockerSetup=true
+                                                    revision++
+                                                })
+                                            }
+                                            if(blockApps){
+                                                Text(if(FocusAppBlocker.isEnabled(this@MainActivity))
+                                                    "Android Accessibility access is enabled · blocking active for focus sessions."
+                                                    else "Setup required: enable STAYCALM app blocker in Android Accessibility settings before starting focus.",
+                                                    color=if(FocusAppBlocker.isEnabled(this@MainActivity))Sub else Rose,fontSize=11.sp)
+                                                TextButton(onClick={blockerSetup=true}){Text("Set up app blocking")}
+                                            }
+                                            Text("Only the three app identities are checked. No screen text is read or collected. Android Settings can disable this service at any time.",fontSize=11.sp,color=Sub)
+                                            HorizontalDivider(color=Border)
+                                            Spacer(Modifier.height(12.dp))
+                                            Row(verticalAlignment=Alignment.CenterVertically){
+                                                Column(Modifier.weight(1f)){
                                                     Text("Protect session from uninstall",fontWeight=FontWeight.Bold)
                                                     Text("Ask for Device Admin when starting. Keep protection through pauses; release after completion or an allowed End session.",fontSize=12.sp,color=Sub)
                                                 }
@@ -522,6 +552,11 @@ class MainActivity:ComponentActivity(){
                     revision++;showReset=false
                 }){Text("End session")}},dismissButton={TextButton(onClick={showReset=false}){Text("Keep going")}})
             }
+            if(blockerSetup)AlertDialog(onDismissRequest={blockerSetup=false},
+                title={Text("Allow focus app blocking")},
+                text={Text("STAYCALM uses Android Accessibility only to detect when Instagram, Instagram Lite or YouTube opens. During an unfinished focus session it returns you to Home. It does not inspect screen text or upload activity. The service is optional and can be disabled in Android Settings. Open Accessibility settings, select STAYCALM app blocker and enable it, then return to start focusing.")},
+                confirmButton={TextButton(onClick={blockerSetup=false;startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))}){Text("Open Accessibility settings")}},
+                dismissButton={TextButton(onClick={blockerSetup=false}){Text("Not now")}})
             if(protectionError!=null)AlertDialog(onDismissRequest={protectionError=null},title={Text("Session protection")},text={Text(protectionError.orEmpty())},confirmButton={TextButton(onClick={protectionError=null}){Text("OK")}})
             if(cancellationError!=null)AlertDialog(onDismissRequest={cancellationError=null},title={Text("Session kept")},text={Text(cancellationError.orEmpty())},confirmButton={TextButton(onClick={cancellationError=null}){Text("OK")}})
             if(completion!=null)AlertDialog(onDismissRequest={store.dismissCompletion();completion=null},icon={Icon(Icons.Rounded.LocalFlorist,null,tint=Rose)},title={Text(if(mode=="focus")"A little more bloomed." else "Welcome back.")},text={Text(completion.orEmpty())},confirmButton={TextButton(onClick={store.dismissCompletion();completion=null;mode=if(mode=="focus")"break" else "focus";store.configure(if(mode=="break")5 else 25,mode=mode);revision++}){Text(if(mode=="focus")"Take a 5-minute break" else "Back to focus")}},dismissButton={TextButton(onClick={store.dismissCompletion();completion=null}){Text("Lovely")}})

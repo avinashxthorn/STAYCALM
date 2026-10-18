@@ -49,6 +49,12 @@
       <intent-filter><action android:name="android.app.action.DEVICE_ADMIN_ENABLED"/></intent-filter>
     </receiver>
     <receiver android:name=".QuoteReceiver" android:exported="false"/>
+    <service android:name=".FocusAppBlocker" android:exported="true"
+        android:label="@string/focus_blocker_label"
+        android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+      <intent-filter><action android:name="android.accessibilityservice.AccessibilityService"/></intent-filter>
+      <meta-data android:name="android.accessibilityservice" android:resource="@xml/focus_app_blocker"/>
+    </service>
     <service android:name=".TimerService" android:exported="false" android:foregroundServiceType="specialUse">
       <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
           android:value="User-started focus and break countdown with a persistent locked notification and timely completion, including silent sessions."/>

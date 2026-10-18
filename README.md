@@ -62,3 +62,12 @@ Verification includes full-hour boundaries, zero-balance cancellation, three fre
 Enable **Settings → Protect session from uninstall** before starting. Android requests Device Admin consent for each new protected session. Direct uninstall is blocked while the administrator is active, including when paused. Completion or an allowed End session removes the administrator automatically; having points alone does not remove it. Denying activation leaves the session unstarted. Protection cannot be switched off inside STAYCALM until the session ends.
 
 This is optional, uses an empty device-admin policy list (no password, camera, lock or data-wipe powers), and does not request Accessibility. Android Settings can always deactivate the administrator. This is protection against direct uninstall, not a guarantee against deliberate system-level removal. A foreground timer remains active during protected running sessions even if notification locking is off. Permission must be granted again for the next protected session after automatic removal.
+
+
+## Focus app blocking (v3.7)
+
+STAYCALM can **optionally** stop Instagram (`com.instagram.android`), Instagram Lite (`com.instagram.lite`) and YouTube (`com.google.android.youtube`) from opening while an unfinished focus session exists (including a paused session). Break sessions are unaffected. On natural completion or an allowed End session, all three apps work normally; their data, notifications and installation are never altered.
+
+**Setup:** In STAYCALM Settings, leave **Block distracting apps** enabled, select **Set up app blocking**, read the disclosure and enable **STAYCALM app blocker** in Android **Accessibility** settings. Focus sessions will not start while this setting is enabled and Accessibility access is unavailable; you may turn the block setting off if you prefer to focus without blocking. During a session, attempting to open a blocked app returns to the Android Home screen with a short explanation.
+
+**Privacy and Android limits:** The service receives only window-change events from those three app packages. It does not inspect screen text, read messages, transmit activity or block websites opened in browsers. The user can disable the service through Android Settings at any time; a non-device-owner app cannot guarantee blocking if the user disables the service, the phone force-stops STAYCALM or the system terminates the service. Google Play distribution requires the appropriate Accessibility API disclosure/declaration.

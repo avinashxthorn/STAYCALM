@@ -62,6 +62,8 @@ class FocusStore(private val context: Context) {
         if(saved && !value){SessionUninstallGuard.clearPending(context);SessionUninstallGuard.releaseIfIdle(context)}
         saved
     }
+    fun blockDistractingApps():Boolean=prefs.getBoolean("block_distracting_apps",true)
+    fun setBlockDistractingApps(value:Boolean){prefs.edit().putBoolean("block_distracting_apps",value).apply()}
     fun lockTimerNotification():Boolean=prefs.getBoolean("lock_timer_notification",true)
     fun setLockTimerNotification(value:Boolean){
         prefs.edit().putBoolean("lock_timer_notification",value).apply()
@@ -105,6 +107,8 @@ class FocusStore(private val context: Context) {
     } }
     fun start():Boolean = synchronized(timerLock) {
         val s=state();if(s.running)return true
+        // Never silently start a protected focus session when its requested blocker is unavailable.
+        if(s.mode=="focus" && blockDistractingApps() && !FocusAppBlocker.isEnabled(context))return false
         if(uninstallProtectionEnabled() && !SessionUninstallGuard.ready(context))return false
         val ms=s.remainingMs.coerceAtLeast(1L)
         val next=s.copy(running=true,endElapsed=SystemClock.elapsedRealtime()+ms,
