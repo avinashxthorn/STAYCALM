@@ -33,6 +33,9 @@ import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import java.time.*
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -58,7 +61,27 @@ class MainActivity:ComponentActivity(){
             var tick by remember{mutableLongStateOf(0L)}
             var revision by remember{mutableIntStateOf(0)}
             var sound by remember{mutableStateOf(store.lastSound())}
-            var playing by remember{mutableStateOf(getSharedPreferences("staycalm_v2",MODE_PRIVATE).getBoolean("audio_playing",false))}
+            val playing=AudioPlayback.state.playing
+            var audioRevision by remember{mutableIntStateOf(0)}
+            var importing by remember{mutableStateOf(false)}
+            var importError by remember{mutableStateOf<String?>(null)}
+            val audioLibrary=remember{AudioLibrary(this@MainActivity)}
+            val audioChoices=remember(audioRevision){audioLibrary.all()}
+            val scope=rememberCoroutineScope()
+            val audioPicker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->
+                if(uri!=null){
+                    importing=true
+                    scope.launch{
+                        try{
+                            val imported=withContext(Dispatchers.IO){audioLibrary.import(uri)}
+                            sound=imported.id;store.setSound(sound);audioRevision++
+                            if(AudioPlayback.state.playing)startForegroundService(Intent(this@MainActivity,SoundService::class.java).putExtra("sound",sound))
+                            else stopService(Intent(this@MainActivity,SoundService::class.java))
+                        }catch(error:Exception){importError=error.message?:"Could not import this audio. Try another file."}
+                        finally{importing=false}
+                    }
+                }
+            }
             var openSound by remember{mutableStateOf(false)}
             var editTask by remember{mutableStateOf<PlanItem?>(null)}
             var adding by remember{mutableStateOf(false)}
@@ -79,7 +102,6 @@ class MainActivity:ComponentActivity(){
                 if(store.completeIfDue())revision++
                 completion=store.completion()
                 if(store.logs().size != knownLogCount){knownLogCount=store.logs().size;revision++}
-                playing=getSharedPreferences("staycalm_v2",MODE_PRIVATE).getBoolean("audio_playing",false)
                 delay(1000)
             }}
             val current=remember(revision,tick){store.state()}
@@ -117,8 +139,8 @@ class MainActivity:ComponentActivity(){
                                         totalMinutes=total,
                                         minutesToday=today,
                                         dailyGoal=store.dailyGoal(),
-                                        selectedSound=Ambients.all.firstOrNull{it.id==sound}?:Ambients.all.first(),
-                                        playing=playing,
+                                        selectedSound=audioLibrary.find(sound),
+                                        onImport={audioPicker.launch(arrayOf("audio/*"))},importing=importing,
                                         onDuration={newMinutes->duration=newMinutes;store.configure(newMinutes,mode=mode);revision++},
                                         onToggle={
                                             if(current.running)store.pause()else store.start()
@@ -126,17 +148,6 @@ class MainActivity:ComponentActivity(){
                                         },
                                         onAbandon={showReset=true},
                                         onSoundSelect={openSound=true},
-                                        onSoundToggle={
-                                            if(playing){
-                                                startService(Intent(this@MainActivity,SoundService::class.java).setAction("pause"))
-                                                playing=false
-                                            }else{
-                                                try{
-                                                    startForegroundService(Intent(this@MainActivity,SoundService::class.java).putExtra("sound",sound))
-                                                    playing=true
-                                                }catch (_:Exception){playing=false}
-                                            }
-                                        },
                                         onOpenPlanner={page=1}
                                     )
                                 }
@@ -275,7 +286,7 @@ class MainActivity:ComponentActivity(){
                                     Surface(shape=RoundedCornerShape(22.dp),color=Color.White){
                                         Column(Modifier.padding(19.dp)){Text("Private by design",fontWeight=FontWeight.Bold,fontSize=17.sp);Spacer(Modifier.height(7.dp));Text("Your plans, focus history and turtle live on this device. No accounts, cloud backup, analytics trackers or AI.",color=Sub,fontSize=13.sp)}
                                     }
-                                    Text("STAYCALM · BLOOM EDITION 3.0",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
+                                    Text("STAYCALM · BLOOM EDITION 3.1",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
                                 }
                             }
                             Spacer(Modifier.height(24.dp))
@@ -285,17 +296,25 @@ class MainActivity:ComponentActivity(){
                 }
             if(showReset)AlertDialog(onDismissRequest={showReset=false},title={Text("End this moment?")},text={Text("This session’s unfinished minutes won’t count toward your progress.")},confirmButton={TextButton(onClick={store.abandon();revision++;showReset=false}){Text("End session")}},dismissButton={TextButton(onClick={showReset=false}){Text("Keep going")}})
             if(completion!=null)AlertDialog(onDismissRequest={store.dismissCompletion();completion=null},icon={Icon(Icons.Rounded.LocalFlorist,null,tint=Rose)},title={Text(if(mode=="focus")"A little more bloomed." else "Welcome back.")},text={Text(completion.orEmpty())},confirmButton={TextButton(onClick={store.dismissCompletion();completion=null;mode=if(mode=="focus")"break" else "focus";store.configure(if(mode=="break")5 else 25,mode=mode);revision++}){Text(if(mode=="focus")"Take a 5-minute break" else "Back to focus")}},dismissButton={TextButton(onClick={store.dismissCompletion();completion=null}){Text("Lovely")}})
-            if(openSound)AlertDialog(onDismissRequest={openSound=false},title={Text("Find your atmosphere")},text={
+            if(importError!=null)AlertDialog(onDismissRequest={importError=null},title={Text("Audio could not be added")},text={Text(importError.orEmpty())},confirmButton={TextButton(onClick={importError=null}){Text("OK")}})
+            if(openSound)AlertDialog(onDismissRequest={openSound=false},title={Text("Your focus audio")},text={
                 Column(Modifier.heightIn(max=455.dp).verticalScroll(rememberScrollState())){
-                    Ambients.all.forEach {ambient->
+                    Text("Every track loops until the session ends.",fontSize=12.sp,color=Sub)
+                    TextButton(enabled=!importing,onClick={openSound=false;audioPicker.launch(arrayOf("audio/*"))}){Icon(Icons.Rounded.Add,null);Text("Add your audio")}
+                    audioChoices.forEach {ambient->
                         Row(Modifier.fillMaxWidth().clickable{
                             sound=ambient.id;store.setSound(sound);openSound=false
-                            if(playing)startService(Intent(this@MainActivity,SoundService::class.java).putExtra("sound",sound))
+                            if(playing)startForegroundService(Intent(this@MainActivity,SoundService::class.java).putExtra("sound",sound)) else stopService(Intent(this@MainActivity,SoundService::class.java))
                         }.padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically){
                             Icon(Icons.Rounded.GraphicEq,null,tint=if(sound==ambient.id)Rose else Sub)
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)){Text(ambient.label,fontWeight=FontWeight.Bold);Text(ambient.detail,fontSize=12.sp,color=Sub)}
                             if(sound==ambient.id)Icon(Icons.Rounded.Check,null,tint=Rose)
+                            if(ambient.localFile!=null)IconButton(onClick={
+                                if(AudioPlayback.state.id==ambient.id)stopService(Intent(this@MainActivity,SoundService::class.java))
+                                audioLibrary.remove(ambient);audioRevision++
+                                if(sound==ambient.id){sound=Ambients.all.first().id;store.setSound(sound)}
+                            }){Icon(Icons.Rounded.DeleteOutline,"Remove ${ambient.label}",tint=Sub)}
                         }
                         HorizontalDivider(color=Border)
                     }

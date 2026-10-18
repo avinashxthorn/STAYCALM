@@ -30,10 +30,10 @@ private val turtleGreen=Color(0xFFD37496)
 @Composable
 fun StudioFocus(
     durationMinutes:Int, remainingMs:Long, running:Boolean, totalMinutes:Int,
-    minutesToday:Int, dailyGoal:Int, selectedSound:Ambient, playing:Boolean,
+    minutesToday:Int, dailyGoal:Int, selectedSound:Ambient, onImport:()->Unit, importing:Boolean,
     mode:String, intention:String, onIntention:(String)->Unit, onMode:(String)->Unit,
     onDuration:(Int)->Unit, onToggle:()->Unit, onAbandon:()->Unit,
-    onSoundSelect:()->Unit, onSoundToggle:()->Unit, onOpenPlanner:()->Unit
+    onSoundSelect:()->Unit, onOpenPlanner:()->Unit
 ){
     val progress=FocusClock.progress(remainingMs,durationMinutes)
     val animatedProgress by animateFloatAsState(progress,tween(300,easing=LinearEasing),label="session progress")
@@ -113,18 +113,7 @@ fun StudioFocus(
                 LinearProgressIndicator(progress={(minutesToday.toFloat()/dailyGoal.coerceAtLeast(1)).coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),color=roseInk,trackColor=lightRose)
             }
         }
-        Surface(shape=RoundedCornerShape(22.dp),color=Color.White,border=BorderStroke(1.dp,lightRose)){
-            Row(Modifier.fillMaxWidth().padding(14.dp),verticalAlignment=Alignment.CenterVertically){
-                Surface(onClick=onSoundSelect,color=lightRose,shape=RoundedCornerShape(14.dp)){
-                    Icon(Icons.Rounded.GraphicEq,"Choose soundscape",tint=roseInk,modifier=Modifier.padding(14.dp).size(24.dp))
-                }
-                Column(Modifier.weight(1f).clickable(onClick=onSoundSelect).padding(horizontal=12.dp)){
-                    Text(selectedSound.label,fontWeight=FontWeight.Bold,color=plumInk)
-                    Text(if(playing)"Playing · tap to explore" else "Soundscapes · tap to explore",fontSize=11.sp,color=mutedInk)
-                }
-                IconButton(onClick=onSoundToggle){Icon(if(playing)Icons.Rounded.PauseCircleFilled else Icons.Rounded.PlayCircleFilled,if(playing)"Pause sound" else "Play sound",tint=roseInk,modifier=Modifier.size(36.dp))}
-            }
-        }
+        FocusMusicPlayer(selectedSound,onSoundSelect,onImport,importing)
         Surface(shape=RoundedCornerShape(26.dp),color=lightRose){
             Column(Modifier.fillMaxWidth().padding(20.dp)){
                 Row(verticalAlignment=Alignment.CenterVertically){

@@ -4,16 +4,13 @@
 Manrope variable font, © Manrope Project Authors. **SIL Open Font License 1.1**. Source: https://github.com/google/fonts/tree/main/ofl/manrope
 License: https://openfontlicense.org/ and https://github.com/google/fonts/blob/main/ofl/manrope/OFL.txt
 
-## Ambient audio
-Seven normalized seamless MP3 loops from https://github.com/twtrubiks/moonseal/tree/main/public/audio .
-Documented CC0 1.0 / Public Domain sources:
-- Rain: Silencyo, Freesound 81818 (CC0)
-- Ocean: Rmutt, Freesound 156598 (CC0)
-- Birds: SamsterBirdies, Freesound 578523 (CC0)
-- Fireplace: archive.org Red_Library_Fire, R30-09 (CC0)
-- Wind: archive.org USC GOLD_TAPE_55_56 (CC0)
-- Stream: archive.org USC GOLD_TAPE_53_54 (CC0)
-- Thunder: archive.org 1HourThunderstorm (Public Domain)
+## User-supplied audio collection (3.1)
 
-Source documentation: https://github.com/twtrubiks/moonseal/blob/main/public/audio/README.md
-All recording assets are bundled locally at build time, not fetched at runtime. Verify upstream license metadata before public commercial redistribution.
+The former seven downloaded soundscapes are no longer bundled. The repository owner supplied the following videos and requested their audio in this app. The original AAC streams were remuxed to M4A without re-encoding. No CC0 claim is made for these supplied tracks.
+
+- `focus_clip_1.m4a`: `VID_20261019013820.mp4` — Through the Glass Pane
+- `focus_clip_2.m4a`: `VID_20261019013952.mp4` — The Tree Line
+- `focus_clip_3.m4a`: `VID_20261019014105.mp4` — Under the Grey Bough
+- `focus_clip_4.m4a`: `VID_20261019013652.mp4` — Midnight Windowpane
+
+Personal imports stay in the app's private local storage and are not uploaded.

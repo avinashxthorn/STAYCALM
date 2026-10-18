@@ -3,82 +3,187 @@ package com.staycalm.focus
 import android.app.*
 import android.content.*
 import android.media.*
-import android.os.Build
+import android.media.session.MediaSession
+import android.media.session.PlaybackState
+import android.os.Handler
+import android.os.Looper
+import android.os.PowerManager
+import androidx.compose.runtime.*
+import java.io.File
 
-data class Ambient(val id:String,val label:String,val detail:String,val glyph:String)
-object Ambients {
-    val all=listOf(
-        Ambient("rain","Soft rain","Gentle rain on glass","rain"),
-        Ambient("ocean","Ocean tide","Slow coastal waves","water"),
-        Ambient("birds","Dawn chorus","Birdsong and foliage","forest"),
-        Ambient("stream","Flowing stream","Freshwater current","stream"),
-        Ambient("fireplace","Fireside","Warm crackling logs","fire"),
-        Ambient("wind","Night wind","A steady soft breeze","wind"),
-        Ambient("thunder","Distant thunder","Rainclouds and rumble","storm")
-    )
-}
+// The service owns playback; the UI only observes it. No Activity reference is retained.
+data class AudioStatus(val id:String="",val playing:Boolean=false,val loading:Boolean=false,val position:Long=0,val duration:Long=0,val error:String?=null)
+object AudioPlayback { var state by mutableStateOf(AudioStatus()); internal set }
 
 class SoundService:Service(){
     private val channel="staycalm_ambient"
     private var player:MediaPlayer?=null
-    private var current:String=""
-    private var audio:AudioManager?=null
-    @Suppress("DEPRECATION")
-    private val focusListener=AudioManager.OnAudioFocusChangeListener { state->
-        if(state==AudioManager.AUDIOFOCUS_LOSS){setPlayback(false);stopSelf()}
-        else if(state==AudioManager.AUDIOFOCUS_LOSS_TRANSIENT){player?.pause();setPlayback(false)}
-        else if(state==AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK){player?.setVolume(.15f,.15f)}
-        else if(state==AudioManager.AUDIOFOCUS_GAIN){applyVolume();player?.start();setPlayback(player!=null)}
-    }
+    private var track:Ambient?=null
+    private var prepared=false
+    private var playWhenReady=true
+    private var resumeOnGain=false
+    private var ducked=false
+    private lateinit var audio:AudioManager
+    private lateinit var session:MediaSession
+    private lateinit var focusRequest:AudioFocusRequest
+    private val handler=Handler(Looper.getMainLooper())
+    private val pulse=object:Runnable{override fun run(){
+        if(FocusStore(this@SoundService).completeIfDue())return
+        publish()
+        handler.postDelayed(this,500)
+    }}
+    private val attributes=AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build()
     override fun onBind(intent:Intent?)=null
-    override fun onCreate(){super.onCreate()
-        getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(channel,"Ambient audio",NotificationManager.IMPORTANCE_LOW))
+    override fun onCreate(){
+        super.onCreate()
+        audio=getSystemService(AudioManager::class.java)
+        focusRequest=AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).setAudioAttributes(attributes)
+            .setOnAudioFocusChangeListener({change->
+                when(change){
+                    AudioManager.AUDIOFOCUS_LOSS->{resumeOnGain=false;pausePlayback();audio.abandonAudioFocusRequest(focusRequest)}
+                    AudioManager.AUDIOFOCUS_LOSS_TRANSIENT->{resumeOnGain=prepared && player?.isPlaying==true;pausePlayback(manual=false)}
+                    AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK->{ducked=true;applyVolume()}
+                    AudioManager.AUDIOFOCUS_GAIN->{ducked=false;applyVolume();if(resumeOnGain){resumeOnGain=false;playPrepared()}}
+                }
+            },handler).build()
+        getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel(channel,"Focus music",NotificationManager.IMPORTANCE_LOW).apply{setSound(null,null)})
+        session=MediaSession(this,"STAYCALM focus player").apply{
+            setCallback(object:MediaSession.Callback(){
+                override fun onPlay(){resumePlayback()}
+                override fun onPause(){pausePlayback()}
+                override fun onStop(){stopSelf()}
+                override fun onSeekTo(pos:Long){seek(pos)}
+                override fun onSkipToNext(){skip(1)}
+                override fun onSkipToPrevious(){skip(-1)}
+            },handler)
+            isActive=true
+        }
+        handler.post(pulse)
     }
     override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int {
         when(intent?.action){
             "stop"->{stopSelf();return START_NOT_STICKY}
-            "volume"->{applyVolume();return START_NOT_STICKY}
-            "pause"->{setPlayback(false);stopSelf();return START_NOT_STICKY}
+            "pause"->{pausePlayback();return START_NOT_STICKY}
+            "seek"->{seek(intent.getLongExtra("position",0));return START_NOT_STICKY}
+            "volume"->{applyVolume();if(player==null)stopSelf();return START_NOT_STICKY}
         }
-        val sound=intent?.getStringExtra("sound")?:"rain"
-        val label=Ambients.all.firstOrNull{it.id==sound}?.label?:"Ambient sound"
-        val intentOpen=PendingIntent.getActivity(this,0,Intent(this,MainActivity::class.java),PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val intentStop=PendingIntent.getService(this,1,Intent(this,SoundService::class.java).setAction("stop"),PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val note=Notification.Builder(this,channel).setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentTitle("STAYCALM · ${label}").setContentText("Ambient audio playing offline")
-            .setContentIntent(intentOpen).setOngoing(true)
-            .addAction(Notification.Action.Builder(android.R.drawable.ic_media_pause,"Stop sound",intentStop).build()).build()
-        startForeground(24,note)
-        if(current!=sound || player==null){releaseAudio()
-            audio=getSystemService(AUDIO_SERVICE) as AudioManager
-            @Suppress("DEPRECATION")
-            val granted=audio?.requestAudioFocus(focusListener,AudioManager.STREAM_MUSIC,AudioManager.AUDIOFOCUS_GAIN)==AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-            if(!granted){stopSelf();return START_NOT_STICKY}
-            val id=resources.getIdentifier(sound,"raw",packageName)
-            if(id==0){stopSelf();return START_NOT_STICKY}
-            player=MediaPlayer.create(this,id)?.apply{
-                isLooping=true
-                applyVolumeTo(this)
-                start()
+        // Must enter the foreground before requesting audio focus on Android 15.
+        startForeground(24,notification())
+        when(intent?.action){
+            "next"->skip(1)
+            "previous"->skip(-1)
+            else->{
+                val selected=AudioLibrary(this).find(intent?.getStringExtra("sound")?:FocusStore(this).lastSound())
+                if(track?.id==selected.id && player!=null)resumePlayback() else load(selected)
             }
-            current=sound
-            if(player==null){setPlayback(false);stopSelf()}else setPlayback(true)
-        }else{applyVolume();if(player?.isPlaying==false)player?.start();setPlayback(true)}
+        }
         return START_NOT_STICKY
     }
-    private fun setPlayback(playing:Boolean){
-        getSharedPreferences("staycalm_v2",MODE_PRIVATE).edit().putBoolean("audio_playing",playing).apply()
+    private fun load(selected:Ambient){
+        releasePlayer()
+        playWhenReady=true
+        track=selected
+        FocusStore(this).setSound(selected.id)
+        AudioPlayback.state=AudioStatus(id=selected.id,loading=true)
+        updateNotification()
+        try{
+            val p=MediaPlayer()
+            player=p
+            p.setAudioAttributes(attributes)
+            p.setWakeMode(this,PowerManager.PARTIAL_WAKE_LOCK)
+            p.isLooping=true
+            if(selected.localFile!=null){p.setDataSource(File(filesDir,"audio/${selected.localFile}").absolutePath)}
+            else resources.openRawResourceFd(selected.raw).use{p.setDataSource(it.fileDescriptor,it.startOffset,it.length)}
+            p.setOnPreparedListener{
+                if(player===it){prepared=true;it.isLooping=true;if(playWhenReady)playPrepared() else {publish();updateNotification()}}
+            }
+            p.setOnSeekCompleteListener{publish();updateSession()}
+            p.setOnErrorListener{_,_,_->fail("This file cannot be played. Choose another audio file.");true}
+            p.prepareAsync()
+        }catch(_:Exception){fail("Could not open this audio. Try importing it again.")}
     }
-    private fun applyVolumeTo(p:MediaPlayer){
-        val v=FocusStore(this).soundVolume().coerceIn(0f,1f)
-        p.setVolume(v,v)
+    private fun resumePlayback(){
+        playWhenReady=true
+        if(player==null){load(AudioLibrary(this).find(FocusStore(this).lastSound()));return}
+        if(prepared)playPrepared()
     }
-    private fun applyVolume(){player?.let{applyVolumeTo(it)}}
-    private fun releaseAudio(){
-        runCatching{player?.stop()};runCatching{player?.release()};player=null
-        @Suppress("DEPRECATION")
-        runCatching{audio?.abandonAudioFocus(focusListener)}
+    private fun playPrepared(){
+        if(!prepared)return
+        try{
+            startForeground(24,notification())
+            if(audio.requestAudioFocus(focusRequest)!=AudioManager.AUDIOFOCUS_REQUEST_GRANTED){
+                AudioPlayback.state=AudioPlayback.state.copy(playing=false,loading=false,error="Audio is busy. Tap play to try again.")
+                return
+            }
+            applyVolume();player?.start();publish();updateNotification()
+        }catch(_:Exception){fail("Playback could not start. Please try another file.")}
     }
-    override fun onDestroy(){setPlayback(false);releaseAudio();super.onDestroy()}
+    private fun pausePlayback(manual:Boolean=true){
+        playWhenReady=false
+        if(manual){resumeOnGain=false;audio.abandonAudioFocusRequest(focusRequest)}
+        if(prepared)runCatching{player?.pause()}
+        publish();updateNotification()
+    }
+    private fun seek(position:Long){
+        if(prepared)runCatching{player?.seekTo(position.coerceIn(0,(player?.duration?.toLong()?:0).coerceAtLeast(0)),MediaPlayer.SEEK_CLOSEST)}
+    }
+    private fun skip(direction:Int){
+        val choices=AudioLibrary(this).all()
+        val index=choices.indexOfFirst{it.id==track?.id}.coerceAtLeast(0)
+        load(choices[(index+direction+choices.size)%choices.size])
+    }
+    private fun publish(){
+        val p=player
+        if(prepared && p!=null)runCatching{
+            AudioPlayback.state=AudioStatus(track?.id.orEmpty(),p.isPlaying,false,p.currentPosition.toLong(),p.duration.toLong())
+            updateSession()
+        }
+    }
+    private fun updateSession(){
+        val state=AudioPlayback.state
+        val status=if(state.loading)PlaybackState.STATE_BUFFERING else if(state.playing)PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED
+        session.setPlaybackState(PlaybackState.Builder().setActions(PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_STOP or PlaybackState.ACTION_SEEK_TO or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS).setState(status,state.position,if(state.playing)1f else 0f).build())
+    }
+    private fun action(name:String):PendingIntent {
+        val intent=Intent(this,SoundService::class.java).setAction(name)
+        return if(name=="play"||name=="next"||name=="previous")PendingIntent.getForegroundService(this,name.hashCode(),intent,PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        else PendingIntent.getService(this,name.hashCode(),intent,PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
+    private fun notification():Notification {
+        val state=AudioPlayback.state
+        val title=track?.label?:"Focus music"
+        val open=PendingIntent.getActivity(this,0,Intent(this,MainActivity::class.java),PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        return Notification.Builder(this,channel).setSmallIcon(android.R.drawable.ic_media_play).setContentTitle(title)
+            .setContentText(if(state.loading)"Preparing your audio…" else if(state.playing)"Looping until your session ends" else "Paused · resume when you’re ready")
+            .setContentIntent(open).setOnlyAlertOnce(true).setOngoing(state.playing).setVisibility(Notification.VISIBILITY_PUBLIC)
+            .addAction(Notification.Action.Builder(android.R.drawable.ic_media_previous,"Previous",action("previous")).build())
+            .addAction(Notification.Action.Builder(if(state.playing)android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,if(state.playing)"Pause" else "Play",action(if(state.playing)"pause" else "play")).build())
+            .addAction(Notification.Action.Builder(android.R.drawable.ic_media_next,"Next",action("next")).build())
+            .addAction(Notification.Action.Builder(android.R.drawable.ic_menu_close_clear_cancel,"Stop",action("stop")).build())
+            .setStyle(Notification.MediaStyle().setMediaSession(session.sessionToken).setShowActionsInCompactView(0,1,2)).build()
+    }
+    private fun updateNotification(){
+        session.setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE,track?.label?:"Focus music").putString(MediaMetadata.METADATA_KEY_ARTIST,"STAYCALM").putLong(MediaMetadata.METADATA_KEY_DURATION,AudioPlayback.state.duration).build())
+        updateSession()
+        runCatching{getSystemService(NotificationManager::class.java).notify(24,notification())}
+    }
+    private fun applyVolume(){
+        val volume=FocusStore(this).soundVolume().coerceIn(0f,1f)*(if(ducked).2f else 1f)
+        if(prepared)runCatching{player?.setVolume(volume,volume)}
+    }
+    private fun fail(message:String){
+        AudioPlayback.state=AudioStatus(id=track?.id.orEmpty(),error=message)
+        stopSelf()
+    }
+    private fun releasePlayer(){prepared=false;runCatching{player?.release()};player=null;resumeOnGain=false}
+    override fun onDestroy(){
+        handler.removeCallbacksAndMessages(null)
+        releasePlayer()
+        audio.abandonAudioFocusRequest(focusRequest)
+        session.isActive=false;session.release()
+        val error=AudioPlayback.state.error
+        AudioPlayback.state=AudioStatus(error=error)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        super.onDestroy()
+    }
 }

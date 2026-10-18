@@ -57,7 +57,7 @@ class FocusStore(private val context: Context) {
     fun setDnd(value:Boolean){prefs.edit().putBoolean("focus_dnd",value).apply()}
     fun soundVolume():Float=prefs.getFloat("volume",.66f)
     fun setVolume(v:Float){prefs.edit().putFloat("volume",v).apply()}
-    fun lastSound():String=prefs.getString("sound","rain")?:"rain"
+    fun lastSound():String=AudioLibrary(context).find(prefs.getString("sound",Ambients.all.first().id)?:Ambients.all.first().id).id
     fun setSound(s:String){prefs.edit().putString("sound",s).apply()}
     @Synchronized fun state():FocusState=FocusState(
         prefs.getBoolean("running",false),prefs.getLong("remaining",25*60_000L),
@@ -98,6 +98,7 @@ class FocusStore(private val context: Context) {
         val s=state()
         save(s.copy(running=false,remainingMs=s.durationMinutes*60_000L,endWall=0L,endElapsed=0L))
         FocusAlarms.cancelFocus(context);Notice.sessionStopped(context);FocusDnd.exit(context)
+        context.stopService(Intent(context,SoundService::class.java))
     }
     @Synchronized fun completeIfDue():Boolean {
         val s=state();if(!s.running||remaining(s)>0)return false

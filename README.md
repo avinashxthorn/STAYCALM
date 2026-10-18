@@ -1,4 +1,4 @@
-# STAYCALM · Bloom 3.0
+# STAYCALM · Bloom 3.1
 
 A native Android focus companion in a cohesive pink theme. Kotlin, Jetpack Compose, Material 3. Android 8.0+.
 
@@ -10,7 +10,7 @@ A native Android focus companion in a cohesive pink theme. Kotlin, Jetpack Compo
 - Session intentions, recent history, daily goal progress, seven-day chart, and consecutive-day streak.
 - Monthly planner with task editing, completion, reminders, and one-tap focus on a task.
 - Six-stage pink turtle companion, earned through completed focus time.
-- Seven bundled offline soundscapes, volume control, audio-focus handling, and notification stop action.
+- Four supplied offline tracks, personal audio imports, seeking, volume, previous/next, and lock-screen playback controls. Every track loops automatically and stops when the session completes or is ended.
 - Optional Do Not Disturb and precise session alerts, subject to Android permissions.
 - Local-only storage, no accounts or analytics.
 
@@ -18,7 +18,7 @@ A native Android focus companion in a cohesive pink theme. Kotlin, Jetpack Compo
 
 Pushes to `main` run `.github/workflows/android-apk.yml`. The workflow downloads licensed offline assets, runs JVM tests and Android lint, builds an installable debug APK, then exercises session and planner flows on an Android 15 emulator.
 
-In the successful Actions run, download **STAYCALM-Bloom-v3-debug-apk**, extract the ZIP, and install `app-debug.apk`. The **STAYCALM-verification** artifact contains check reports and emulator screenshots.
+In the successful Actions run, download **STAYCALM-Bloom-v3.1-debug-apk**, extract the ZIP, and install `app-debug.apk`. The **STAYCALM-verification** artifact contains check reports and emulator screenshots.
 
 This is a debug-signed build, not a Play Store release. CI-generated debug signing keys may differ between runs; an update can require removing the previously installed debug app, which erases its local data. Production distribution needs a stable private signing key.
 

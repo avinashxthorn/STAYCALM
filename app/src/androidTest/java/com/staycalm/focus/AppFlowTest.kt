@@ -104,4 +104,46 @@ class AppFlowTest {
         ui.onNodeWithText("Pause session").performScrollTo().assertIsDisplayed()
         ui.runOnUiThread{assertEquals("break",FocusStore(ui.activity).state().mode)}
     }
+    @Test fun allFourTracksDecodeAndPersonalImportPersists(){
+        val context=ui.activity
+        assertEquals(4,Ambients.all.size)
+        for(track in Ambients.all){
+            val media=android.media.MediaPlayer.create(context,track.raw)
+            assertNotNull("Track must decode: ${track.label}",media)
+            try{assertTrue(media.duration>120_000)}finally{media.release()}
+        }
+        val library=AudioLibrary(context)
+        val imported=library.import(android.net.Uri.parse("android.resource://${context.packageName}/${Ambients.all.first().raw}"))
+        assertTrue(AudioLibrary(context).imported().any{it.id==imported.id})
+        assertTrue(File(context.filesDir,"audio/${imported.localFile}").length()>0)
+        library.remove(imported)
+        assertFalse(AudioLibrary(context).imported().any{it.id==imported.id})
+    }
+    @Test fun playerPausesLoopsAndStopsAtSessionEnd(){
+        fun command(action:String,position:Long=0){ui.runOnUiThread{
+            val intent=android.content.Intent(ui.activity,SoundService::class.java).setAction(action).putExtra("position",position)
+            if(action=="play")ui.activity.startForegroundService(intent) else ui.activity.startService(intent)
+        }}
+        command("play")
+        ui.waitUntil(20_000){AudioPlayback.state.playing && AudioPlayback.state.duration>120_000}
+        command("pause")
+        ui.waitUntil(5_000){!AudioPlayback.state.playing}
+        ui.onNodeWithContentDescription("Play audio").performScrollTo().assertIsDisplayed()
+        screenshot("05-focus-player")
+        val duration=AudioPlayback.state.duration
+        command("seek",duration-2_000)
+        ui.waitUntil(5_000){AudioPlayback.state.position>=duration-3_000}
+        command("play")
+        ui.waitUntil(10_000){AudioPlayback.state.playing && AudioPlayback.state.position<5_000}
+        ui.runOnUiThread{
+            val store=FocusStore(ui.activity)
+            store.configure(5);store.start()
+            ui.activity.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE).edit()
+                .putLong("end_elapsed",SystemClock.elapsedRealtime()-100)
+                .putLong("end_wall",System.currentTimeMillis()-100).commit()
+        }
+        ui.waitUntil(5_000){AudioPlayback.state.id.isEmpty()}
+        ui.runOnUiThread{assertEquals(1,FocusStore(ui.activity).logs().size)}
+    }
+
 }
