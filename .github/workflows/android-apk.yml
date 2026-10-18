@@ -3,6 +3,9 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+concurrency:
+  group: staycalm-android-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -24,7 +27,7 @@ jobs:
       - name: Download offline font and CC0 sound assets
         run: bash scripts/fetch-assets.sh
       - name: Verify local unit tests
-        run: gradle --no-daemon :app:testDebugUnitTest
+        run: gradle --no-daemon :app:testDebugUnitTest --stacktrace --console=plain
       - name: Assemble debug APK
         run: gradle --no-daemon :app:assembleDebug
       - uses: actions/upload-artifact@v4

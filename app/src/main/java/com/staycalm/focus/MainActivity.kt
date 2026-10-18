@@ -221,12 +221,12 @@ class MainActivity:ComponentActivity(){
                                             Spacer(Modifier.height(26.dp))
                                             val days=(6 downTo 0).map{LocalDate.now().minusDays(it.toLong())}
                                             val tallies=days.map{day->logs.filter{Instant.ofEpochMilli(it.at).atZone(ZoneId.systemDefault()).toLocalDate()==day}.sumOf{it.minutes}}
-                                            val max=tallies.maxOrNull()?.coerceAtLeast(30)?:30
+                                            val maxMinutes=tallies.maxOrNull()?.coerceAtLeast(30)?:30
                                             Row(Modifier.fillMaxWidth().height(140.dp),horizontalArrangement=Arrangement.spacedBy(10.dp),verticalAlignment=Alignment.Bottom){
                                                 days.forEachIndexed{idx,day->Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Bottom){
                                                     Text(if(tallies[idx]>0)"${tallies[idx]}" else "",fontSize=10.sp,color=Sub)
                                                     Spacer(Modifier.height(4.dp))
-                                                    Box(Modifier.fillMaxWidth(.67f).height((max(5f,(tallies[idx].toFloat()/max)*90f)).dp).background(if(day==LocalDate.now())Rose else Blush,RoundedCornerShape(topStart=6.dp,topEnd=6.dp)))
+                                                    Box(Modifier.fillMaxWidth(.67f).height((max(5f,(tallies[idx].toFloat()/maxMinutes)*90f)).dp).background(if(day==LocalDate.now())Rose else Blush,RoundedCornerShape(topStart=6.dp,topEnd=6.dp)))
                                                     Spacer(Modifier.height(7.dp))
                                                     Text(day.dayOfWeek.name.take(1),fontSize=12.sp,color=Sub)
                                                 }}
