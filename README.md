@@ -36,3 +36,11 @@ gradle :app:connectedDebugAndroidTest
 The APK is `app/build/outputs/apk/debug/app-debug.apk`. Android can delay notifications without precise-alarm permission; manufacturers may additionally restrict background execution. The timer reconciles its deadline on reopening.
 
 See `DESIGN-SYSTEM.md`, `ASSET-LICENSES.md`, and `QA-CHECKLIST.md`.
+
+
+### First launch (v3.3)
+
+New users see a three-page swipeable intro to focus sessions, their dated work archive,
+progress and study encouragement. **Get started** opens a separate, local-only profile page
+with a required name, an optional subject, a daily goal and optional motivation reminders.
+Saving the profile opens the Focus tab. Existing profiles skip onboarding on subsequent launches.

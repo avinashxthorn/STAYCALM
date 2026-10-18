@@ -1,0 +1,373 @@
+package com.staycalm.focus
+
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
+
+private val introTitles = listOf(
+    "Find your focus.",
+    "Keep every little win.",
+    "Grow at your own pace."
+)
+private val introDescriptions = listOf(
+    "Set a timer, play calming sounds, and give one thing your full attention.",
+    "Plan your day and save your notes or files on the dates you worked.",
+    "See your progress, grow your little companion, and find fresh motivation."
+)
+private val introQuotes = listOf(
+    "One moment at a time.",
+    "Small steps become chapters.",
+    "Progress, not perfection."
+)
+private val introCaptions = listOf("01 / A CALMER START", "02 / YOUR STUDY STORY", "03 / KEEP BLOOMING")
+
+/** Three swipeable introductions followed by a real, separate profile screen.
+ *  A profile is saved only after the last screen's submit button succeeds.
+ */
+@Composable
+fun FirstRunOnboarding(
+    onFinish: (name: String, subject: String, goalMinutes: Int, quoteMinutes: Int) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val pager = rememberPagerState(pageCount = { 3 })
+    val scope = rememberCoroutineScope()
+    var profileStep by rememberSaveable { mutableStateOf(false) }
+    var name by rememberSaveable { mutableStateOf("") }
+    var subject by rememberSaveable { mutableStateOf("") }
+    var goal by rememberSaveable { mutableIntStateOf(120) }
+    var quotes by rememberSaveable { mutableIntStateOf(120) }
+    val backdrop = if (LocalStaycalmDark.current) {
+        Brush.verticalGradient(listOf(Color(0xFF20151E), Color(0xFF34202E), Color(0xFF191219)))
+    } else {
+        Brush.verticalGradient(listOf(Color(0xFFFFF6F9), Color(0xFFFCE8F0), Color(0xFFFFFBFC)))
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().background(backdrop)
+            .statusBarsPadding().navigationBarsPadding()
+            .padding(horizontal = 24.dp, vertical = 15.dp)
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.LocalFlorist, contentDescription = null,
+                tint = scheme.primary, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("staycalm.", fontWeight = FontWeight.ExtraBold, fontSize = 23.sp,
+                color = scheme.primary, letterSpacing = (-0.7).sp)
+            Spacer(Modifier.weight(1f))
+            if (!profileStep) {
+                TextButton(onClick = { profileStep = true }) {
+                    Text("Skip", color = scheme.onSurfaceVariant)
+                }
+            } else {
+                Text("YOUR SPACE", fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.5.sp, color = scheme.primary)
+            }
+        }
+        if (!profileStep) {
+            HorizontalPager(
+                state = pager,
+                modifier = Modifier.weight(1f).fillMaxWidth().testTag("onboarding-pager"),
+                pageSpacing = 12.dp
+            ) { index ->
+                Column(
+                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                        .padding(vertical = 16.dp, horizontal = 3.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(introCaptions[index], fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.7.sp, color = scheme.primary)
+                    Spacer(Modifier.height(19.dp))
+                    IntroIllustration(index)
+                    Spacer(Modifier.height(30.dp))
+                    Text(introTitles[index], fontSize = 31.sp, lineHeight = 36.sp,
+                        fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center,
+                        color = scheme.onBackground, letterSpacing = (-1.1).sp)
+                    Spacer(Modifier.height(11.dp))
+                    Text(introDescriptions[index], fontSize = 14.sp, lineHeight = 21.sp,
+                        textAlign = TextAlign.Center, color = scheme.onSurfaceVariant,
+                        modifier = Modifier.widthIn(max = 305.dp))
+                    Spacer(Modifier.height(15.dp))
+                    Text("“${introQuotes[index]}”", fontSize = 13.sp,
+                        color = scheme.primary, fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center)
+                }
+            }
+
+            Row(Modifier.fillMaxWidth().padding(bottom = 18.dp),
+                horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                repeat(3) { dot ->
+                    val selected = dot == pager.currentPage
+                    Box(
+                        Modifier.padding(horizontal = 4.dp)
+                            .size(width = if (selected) 27.dp else 8.dp, height = 8.dp)
+                            .clip(CircleShape)
+                            .background(if (selected) scheme.primary else scheme.primary.copy(alpha = .23f))
+                    )
+                }
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                if (pager.currentPage > 0) {
+                    OutlinedButton(
+                        onClick = { scope.launch { pager.animateScrollToPage(pager.currentPage - 1) } },
+                        modifier = Modifier.height(54.dp),
+                        shape = RoundedCornerShape(17.dp)
+                    ) {
+                        Icon(Icons.Rounded.ArrowBack, "Previous page")
+                    }
+                    Spacer(Modifier.width(10.dp))
+                }
+                Button(
+                    onClick = {
+                        if (pager.currentPage == 2) profileStep = true
+                        else scope.launch { pager.animateScrollToPage(pager.currentPage + 1) }
+                    },
+                    modifier = Modifier.weight(1f).height(54.dp),
+                    shape = RoundedCornerShape(17.dp)
+                ) {
+                    Text(if (pager.currentPage == 2) "Get started" else "Next",
+                        fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Rounded.ArrowForward, null, modifier = Modifier.size(18.dp))
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        } else {
+            Column(
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                    .padding(top = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                IconButton(onClick = { profileStep = false }) {
+                    Icon(Icons.Rounded.ArrowBack, "Back to introduction",
+                        tint = scheme.onBackground)
+                }
+                Box(
+                    Modifier.fillMaxWidth().height(124.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(Modifier.size(112.dp).clip(CircleShape)
+                        .background(scheme.primaryContainer),
+                        contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.Favorite, null, tint = scheme.primary,
+                            modifier = Modifier.size(43.dp))
+                    }
+                }
+                Text("Let's make it yours.", fontSize = 30.sp, lineHeight = 34.sp,
+                    fontWeight = FontWeight.ExtraBold, letterSpacing = (-1).sp,
+                    color = scheme.onBackground)
+                Text("A little about you, and we'll find your rhythm.",
+                    fontSize = 14.sp, color = scheme.onSurfaceVariant)
+                OutlinedTextField(
+                    value = name, onValueChange = { name = it.take(40) },
+                    label = { Text("Your name *") }, placeholder = { Text("What should we call you?") },
+                    leadingIcon = { Icon(Icons.Rounded.PersonOutline, null) },
+                    singleLine = true, shape = RoundedCornerShape(17.dp),
+                    modifier = Modifier.fillMaxWidth().testTag("onboarding-name")
+                )
+                OutlinedTextField(
+                    value = subject, onValueChange = { subject = it.take(65) },
+                    label = { Text("What are you studying?") },
+                    placeholder = { Text("e.g. Veterinary medicine") },
+                    leadingIcon = { Icon(Icons.Rounded.MenuBook, null) },
+                    singleLine = true, shape = RoundedCornerShape(17.dp),
+                    modifier = Modifier.fillMaxWidth().testTag("onboarding-subject")
+                )
+                Text("YOUR DAILY FOCUS GOAL", fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp, color = scheme.primary)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                    listOf(30, 60, 120).forEach { minutes ->
+                        FilterChip(
+                            selected = goal == minutes, onClick = { goal = minutes },
+                            label = { Text(if (minutes == 120) "2 hours" else "${minutes} min",
+                                fontWeight = FontWeight.SemiBold) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(13.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = scheme.primaryContainer,
+                                selectedLabelColor = scheme.primary
+                            )
+                        )
+                    }
+                }
+                Text("A LITTLE MOTIVATION", fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp, color = scheme.primary)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(0 to "Off", 60 to "1 hour", 120 to "2 hours", 180 to "3 hours").forEach { (minutes, label) ->
+                        FilterChip(
+                            selected = quotes == minutes, onClick = { quotes = minutes },
+                            label = { Text(label, fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = scheme.primaryContainer,
+                                selectedLabelColor = scheme.primary
+                            )
+                        )
+                    }
+                }
+                Text("Your details stay on this device. You can change them in Settings.",
+                    fontSize = 11.sp, color = scheme.onSurfaceVariant)
+                Button(
+                    onClick = { onFinish(name.trim(), subject.trim(), goal, quotes) },
+                    enabled = name.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    shape = RoundedCornerShape(17.dp)
+                ) {
+                    Text("Start my journey", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Rounded.AutoAwesome, null)
+                }
+                Spacer(Modifier.height(18.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun IntroIllustration(page: Int) {
+    val scheme = MaterialTheme.colorScheme
+    Box(Modifier.fillMaxWidth().height(244.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(236.dp).clip(CircleShape)
+            .background(scheme.primary.copy(alpha = if (LocalStaycalmDark.current) .12f else .095f)))
+        when (page) {
+            0 -> {
+                Surface(
+                    modifier = Modifier.width(249.dp).height(204.dp),
+                    shape = RoundedCornerShape(28.dp),
+                    color = scheme.surface,
+                    shadowElevation = 14.dp,
+                    border = BorderStroke(1.dp, scheme.primary.copy(alpha = .12f))
+                ) {
+                    Column(Modifier.padding(18.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Rounded.Spa, null, tint = scheme.primary,
+                                modifier = Modifier.size(17.dp))
+                            Spacer(Modifier.width(7.dp))
+                            Text("FOCUS TIME", fontWeight = FontWeight.Bold, fontSize = 9.sp,
+                                color = scheme.primary, letterSpacing = 1.3.sp)
+                            Spacer(Modifier.weight(1f))
+                            Icon(Icons.Rounded.Headphones, null,
+                                tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(Modifier.height(11.dp))
+                        Box(contentAlignment = Alignment.Center,
+                            modifier = Modifier.size(107.dp)) {
+                            CircularProgressIndicator(
+                                progress = { .72f },
+                                color = scheme.primary, trackColor = scheme.primaryContainer,
+                                strokeWidth = 7.dp, modifier = Modifier.fillMaxSize()
+                            )
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("25:00", fontWeight = FontWeight.Bold,
+                                    fontSize = 24.sp, color = scheme.onSurface)
+                                Text("BREATHE & BEGIN", fontSize = 7.sp,
+                                    letterSpacing = .5.sp, color = scheme.onSurfaceVariant)
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Surface(color = scheme.primaryContainer, shape = CircleShape) {
+                            Text("✦ one task at a time", modifier = Modifier.padding(
+                                horizontal = 13.dp, vertical = 6.dp),
+                                fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
+                                color = scheme.primary)
+                        }
+                    }
+                }
+            }
+            1 -> {
+                Surface(
+                    modifier = Modifier.width(267.dp).height(211.dp),
+                    shape = RoundedCornerShape(26.dp), color = scheme.surface,
+                    shadowElevation = 12.dp,
+                    border = BorderStroke(1.dp, scheme.primary.copy(alpha = .12f))
+                ) {
+                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("October", fontWeight = FontWeight.Bold,
+                                fontSize = 17.sp, color = scheme.onSurface)
+                            Spacer(Modifier.weight(1f))
+                            Icon(Icons.Rounded.CalendarToday, null, tint = scheme.primary,
+                                modifier = Modifier.size(18.dp))
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            listOf("12", "13", "14", "15", "16").forEachIndexed { index, date ->
+                                Box(
+                                    Modifier.weight(1f).height(37.dp)
+                                        .clip(RoundedCornerShape(11.dp))
+                                        .background(if (index == 3) scheme.primary else scheme.primaryContainer.copy(alpha = .6f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(date, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                        color = if (index == 3) scheme.onPrimary else scheme.onSurface)
+                                }
+                            }
+                        }
+                        Surface(shape = RoundedCornerShape(12.dp), color = scheme.primaryContainer) {
+                            Row(Modifier.fillMaxWidth().padding(11.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Rounded.CheckCircle, null, tint = scheme.primary,
+                                    modifier = Modifier.size(19.dp))
+                                Spacer(Modifier.width(9.dp))
+                                Text("Chapter reviewed", color = scheme.onSurface,
+                                    fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                            }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Rounded.Description, null, tint = scheme.primary,
+                                modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(9.dp))
+                            Text("Notes saved to this day", fontSize = 11.sp,
+                                color = scheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+            else -> {
+                Surface(
+                    modifier = Modifier.width(267.dp).height(214.dp),
+                    shape = RoundedCornerShape(28.dp), color = scheme.surface,
+                    shadowElevation = 12.dp,
+                    border = BorderStroke(1.dp, scheme.primary.copy(alpha = .12f))
+                ) {
+                    Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("GROW WITH EVERY SESSION", fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp,
+                            color = scheme.primary)
+                        TurtleAtelier(4, Modifier.fillMaxWidth().height(156.dp))
+                        Text("Every minute adds up.", color = scheme.onSurfaceVariant,
+                            fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+    }
+}

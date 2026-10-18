@@ -146,16 +146,51 @@ class AppFlowTest {
         assertEquals(180,restored.interval())
         restored.setInterval(0)
     }
-    @Test fun firstLaunchAsksForName(){
-        ui.runOnUiThread{
-            ui.activity.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE).edit().remove("profile_ready").commit()
+    @Test fun threeSwipePagesLeadToSeparateProfileAndPersist() {
+        ui.runOnUiThread {
+            ui.activity.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE)
+                .edit().remove("profile_ready").commit()
         }
         ui.activityRule.scenario.recreate()
-        ui.onNodeWithText("Welcome to your focus space").assertIsDisplayed()
-        ui.onNodeWithText("Your name").performTextInput("Learner")
-        ui.onNodeWithText("Begin my journey").performClick()
-        ui.onNodeWithText("Welcome to your focus space").assertDoesNotExist()
-        ui.runOnUiThread{assertEquals("Learner",Personalization(ui.activity).name())}
+        ui.onNodeWithText("Find your focus.").assertIsDisplayed()
+        ui.onNodeWithText("Let your focus bloom.").assertDoesNotExist()
+        screenshot("00-onboarding-focus")
+        // Verify a physical swipe, not just Next button navigation.
+        ui.onNodeWithTag("onboarding-pager").performTouchInput { swipeLeft() }
+        ui.onNodeWithText("Keep every little win.").assertIsDisplayed()
+        screenshot("00-onboarding-journal")
+        ui.onNodeWithText("Next").performClick()
+        ui.onNodeWithText("Grow at your own pace.").assertIsDisplayed()
+        ui.onNodeWithText("Get started").performClick()
+        ui.onNodeWithText("Let's make it yours.").assertIsDisplayed()
+        screenshot("00-onboarding-profile")
+        ui.onNodeWithText("Start my journey").assertIsNotEnabled()
+        ui.onNodeWithTag("onboarding-name").performTextInput("Learner")
+        ui.onNodeWithTag("onboarding-subject").performTextInput("Veterinary science")
+        ui.onNodeWithText("Start my journey").performScrollTo().performClick()
+        ui.onNodeWithText("Let your focus bloom.").assertIsDisplayed()
+        ui.runOnUiThread {
+            val profile = Personalization(ui.activity)
+            assertTrue(profile.isReady())
+            assertEquals("Learner", profile.name())
+            assertEquals("Veterinary science", profile.subject())
+            assertEquals(120, FocusStore(ui.activity).dailyGoal())
+        }
+        ui.activityRule.scenario.recreate()
+        ui.onNodeWithText("Find your focus.").assertDoesNotExist()
+        ui.onNodeWithText("Let your focus bloom.").assertIsDisplayed()
+    }
+    @Test fun onboardingSkipOpensProfileNotHome() {
+        ui.runOnUiThread {
+            ui.activity.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE)
+                .edit().remove("profile_ready").commit()
+        }
+        ui.activityRule.scenario.recreate()
+        ui.onNodeWithText("Skip").performClick()
+        ui.onNodeWithText("Let's make it yours.").assertIsDisplayed()
+        ui.onNodeWithText("Let your focus bloom.").assertDoesNotExist()
+        ui.onNodeWithContentDescription("Back to introduction").performClick()
+        ui.onNodeWithText("Find your focus.").assertIsDisplayed()
     }
     @Test fun playerPausesLoopsAndStopsAtSessionEnd(){
         fun command(action:String,position:Long=0){ui.runOnUiThread{

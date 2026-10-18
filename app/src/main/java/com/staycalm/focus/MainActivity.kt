@@ -68,9 +68,7 @@ class MainActivity:ComponentActivity(){
             var profileSubject by remember{mutableStateOf(personalization.subject())}
             var draftName by remember{mutableStateOf(personalization.name())}
             var draftSubject by remember{mutableStateOf(personalization.subject())}
-            var welcomeName by remember{mutableStateOf("")}
-            var welcomeSubject by remember{mutableStateOf("")}
-            var showWelcome by remember{mutableStateOf(!personalization.isReady())}
+            var profileReady by remember { mutableStateOf(personalization.isReady()) }
             var quoteInterval by remember{mutableIntStateOf(personalization.interval())}
             var quoteMenuExpanded by remember{mutableStateOf(false)}
             var journalRevision by remember{mutableIntStateOf(0)}
@@ -131,7 +129,11 @@ class MainActivity:ComponentActivity(){
             var volume by remember{mutableFloatStateOf(store.soundVolume())}
             var duration by remember{mutableIntStateOf(store.state().durationMinutes)}
             val permission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){}
-            LaunchedEffect(Unit){if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)permission.launch(Manifest.permission.POST_NOTIFICATIONS)}
+            LaunchedEffect(profileReady){
+                if(profileReady && Build.VERSION.SDK_INT>=33 &&
+                    checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
+                    permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
             var knownLogCount by remember{mutableIntStateOf(store.logs().size)}
             LaunchedEffect(Unit){while(true){
                 tick=System.currentTimeMillis()
@@ -151,6 +153,20 @@ class MainActivity:ComponentActivity(){
             val today=logs.filter{Instant.ofEpochMilli(it.at).atZone(ZoneId.systemDefault()).toLocalDate()==LocalDate.now()}.sumOf{it.minutes}
             CompositionLocalProvider(LocalStaycalmDark provides isDark) {
             MaterialTheme(colorScheme=if(isDark)StaycalmDarkColors else StaycalmColors,typography=pinkTypography()){
+                if (!profileReady) {
+                    FirstRunOnboarding(onFinish = { name, subject, dailyGoal, quoteMinutes ->
+                        personalization.setInterval(quoteMinutes)
+                        personalization.saveProfile(name, subject)
+                        store.setDailyGoal(dailyGoal)
+                        profileName=personalization.name()
+                        profileSubject=personalization.subject()
+                        draftName=profileName
+                        draftSubject=profileSubject
+                        quoteInterval=personalization.interval()
+                        goal=dailyGoal.toFloat()
+                        profileReady=true
+                    })
+                } else {
                 Scaffold(containerColor=Fog,bottomBar={
                     NavigationBar(containerColor=MaterialTheme.colorScheme.surface,tonalElevation=0.dp){
                         listOf(Triple("Focus",Icons.Rounded.Timer,0),Triple("Planner",Icons.Rounded.CalendarMonth,1),Triple("Insights",Icons.Rounded.BarChart,2),Triple("Settings",Icons.Rounded.Tune,3)).forEach{(name,icon,index)->
@@ -378,7 +394,7 @@ class MainActivity:ComponentActivity(){
                                     Surface(shape=RoundedCornerShape(22.dp),color=MaterialTheme.colorScheme.surface){
                                         Column(Modifier.padding(19.dp)){Text("Private by design",fontWeight=FontWeight.Bold,fontSize=17.sp);Spacer(Modifier.height(7.dp));Text("Your plans, focus history and turtle live on this device. No accounts, cloud backup, analytics trackers or AI.",color=Sub,fontSize=13.sp)}
                                     }
-                                    Text("STAYCALM · BLOOM EDITION 3.2",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
+                                    Text("STAYCALM · BLOOM EDITION 3.3",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
                                 }
                             }
                             Spacer(Modifier.height(24.dp))
@@ -386,26 +402,6 @@ class MainActivity:ComponentActivity(){
                         }
                     }
                 }
-            if(showWelcome)AlertDialog(
-                onDismissRequest={},
-                icon={Icon(Icons.Rounded.LocalFlorist,null,tint=Rose)},
-                title={Text("Welcome to your focus space")},
-                text={
-                    Column(verticalArrangement=Arrangement.spacedBy(12.dp)){
-                        Text("Make STAYCALM yours. Your name and study goal stay on this device.")
-                        OutlinedTextField(welcomeName,{welcomeName=it.take(40)},label={Text("Your name")},singleLine=true)
-                        OutlinedTextField(welcomeSubject,{welcomeSubject=it.take(65)},label={Text("What are you studying?")},singleLine=true)
-                    }
-                },
-                confirmButton={Button(enabled=welcomeName.isNotBlank(),onClick={
-                    personalization.saveProfile(welcomeName,welcomeSubject)
-                    profileName=personalization.name()
-                    profileSubject=personalization.subject()
-                    draftName=profileName
-                    draftSubject=profileSubject
-                    showWelcome=false
-                }){Text("Begin my journey")}}
-            )
             if(deleteAttachment!=null)AlertDialog(
                 onDismissRequest={deleteAttachment=null},
                 title={Text("Delete this saved file?")},
@@ -454,6 +450,7 @@ class MainActivity:ComponentActivity(){
                     selectedDate=date;revision++;adding=false;editTask=null
                 },onDelete={item->store.deleteTask(item);revision++;editTask=null;adding=false})
             }
+                }
             }
             }
         }
