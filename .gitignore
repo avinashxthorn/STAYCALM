@@ -1,0 +1,9 @@
+/.gradle/
+/build/
+/app/build/
+/.idea/
+*.iml
+/local.properties
+/app/src/main/res/font/manrope.ttf
+/app/src/main/res/raw/*.mp3
+.DS_Store
