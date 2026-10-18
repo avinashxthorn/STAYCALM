@@ -6,6 +6,7 @@ import android.content.*
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
+import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -56,7 +57,7 @@ class MainActivity:ComponentActivity(){
             var tick by remember{mutableLongStateOf(0L)}
             var revision by remember{mutableIntStateOf(0)}
             var sound by remember{mutableStateOf(store.lastSound())}
-            var playing by remember{mutableStateOf(false)}
+            var playing by remember{mutableStateOf(getSharedPreferences("staycalm_v2",MODE_PRIVATE).getBoolean("audio_playing",false))}
             var openSound by remember{mutableStateOf(false)}
             var editTask by remember{mutableStateOf<PlanItem?>(null)}
             var adding by remember{mutableStateOf(false)}
@@ -68,7 +69,12 @@ class MainActivity:ComponentActivity(){
             var duration by remember{mutableIntStateOf(store.state().durationMinutes)}
             val permission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){}
             LaunchedEffect(Unit){if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)permission.launch(Manifest.permission.POST_NOTIFICATIONS)}
-            LaunchedEffect(Unit){while(true){tick=System.currentTimeMillis();if(store.completeIfDue())revision++;delay(300)}}
+            LaunchedEffect(Unit){while(true){
+                tick=System.currentTimeMillis()
+                if(store.completeIfDue())revision++
+                playing=getSharedPreferences("staycalm_v2",MODE_PRIVATE).getBoolean("audio_playing",false)
+                delay(450)
+            }}
             val current=remember(revision,tick){store.state()}
             val left=store.remaining(current)
             val logs=remember(revision){store.logs()}
@@ -93,73 +99,42 @@ class MainActivity:ComponentActivity(){
                 }){pad->
                     Column(Modifier.fillMaxSize().padding(pad)){
                         Row(Modifier.fillMaxWidth().padding(start=23.dp,end=23.dp,top=23.dp,bottom=9.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween){
-                            Column{Text("STAYCALM",fontWeight=FontWeight.ExtraBold,letterSpacing=3.sp,fontSize=17.sp,color=Ink);Text("THE FOCUS STUDIO",fontSize=9.sp,letterSpacing=2.sp,color=Sub)}
+                            Column{Text("STAYCALM",fontWeight=FontWeight.ExtraBold,letterSpacing=2.6.sp,fontSize=19.sp,color=Ink);Text("LESS NOISE  •  MORE YOU",fontSize=9.sp,letterSpacing=1.45.sp,color=Sub)}
                             Surface(shape=CircleShape,color=Blush){Icon(Icons.Rounded.Spa,"Stay calm",tint=Rose,modifier=Modifier.padding(12.dp).size(20.dp))}
                         }
                         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=22.dp),verticalArrangement=Arrangement.spacedBy(18.dp)){
                             Spacer(Modifier.height(8.dp))
                             when(page){
                                 0->{
-                                    Header("Your quiet space.","Make today count, gently.")
-                                    Surface(shape=RoundedCornerShape(27.dp),color=Color.White){
-                                        Column(Modifier.fillMaxWidth().padding(20.dp),horizontalAlignment=Alignment.CenterHorizontally){
-                                            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
-                                                SmallLabel("YOUR COMPANION")
-                                                Text("STAGE ${stage+1}/6",fontSize=11.sp,fontWeight=FontWeight.Bold,color=Rose,letterSpacing=1.sp)
+                                    StudioFocus(
+                                        durationMinutes=current.durationMinutes,
+                                        remainingMs=left,
+                                        running=current.running,
+                                        totalMinutes=total,
+                                        minutesToday=today,
+                                        dailyGoal=store.dailyGoal(),
+                                        selectedSound=Ambients.all.firstOrNull{it.id==sound}?:Ambients.all.first(),
+                                        playing=playing,
+                                        onDuration={newMinutes->duration=newMinutes;store.configure(newMinutes);revision++},
+                                        onToggle={
+                                            if(current.running)store.pause()else store.start()
+                                            revision++
+                                        },
+                                        onAbandon={store.abandon();revision++},
+                                        onSoundSelect={openSound=true},
+                                        onSoundToggle={
+                                            if(playing){
+                                                stopService(Intent(this@MainActivity,SoundService::class.java))
+                                                playing=false
+                                            }else{
+                                                try{
+                                                    startForegroundService(Intent(this@MainActivity,SoundService::class.java).putExtra("sound",sound))
+                                                    playing=true
+                                                }catch (_:Exception){playing=false}
                                             }
-                                            TurtleScene(stage,Modifier.fillMaxWidth().height(205.dp))
-                                            Text(Evolution.title(stage),fontWeight=FontWeight.Bold,fontSize=20.sp,color=Ink)
-                                            Spacer(Modifier.height(5.dp))
-                                            Text(if(stage==5)"A companion grown through focus." else "Every finished minute helps your turtle grow.",fontSize=12.sp,color=Sub,textAlign=TextAlign.Center)
-                                            Spacer(Modifier.height(15.dp))
-                                            val prev=listOf(0,30,90,180,360,720)[stage]
-                                            val next=Evolution.next(total)
-                                            LinearProgressIndicator(progress={if(next==null)1f else ((total-prev).toFloat()/(next-prev)).coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),color=Rose,trackColor=Blush)
-                                            Spacer(Modifier.height(7.dp))
-                                            Text(if(next==null)"Fully evolved · Keep going" else "${next-total} min to next chapter",color=Sub,fontSize=11.sp)
-                                        }
-                                    }
-                                    Surface(shape=RoundedCornerShape(27.dp),color=Color.White){
-                                        Column(Modifier.padding(22.dp),horizontalAlignment=Alignment.CenterHorizontally){
-                                            SmallLabel("FOCUS SESSION")
-                                            Spacer(Modifier.height(14.dp))
-                                            Box(contentAlignment=Alignment.Center){
-                                                CircularProgressIndicator(progress={if(current.running||left<current.durationMinutes*60_000L)1f-left/(current.durationMinutes*60_000f) else 0f},modifier=Modifier.size(207.dp),strokeWidth=8.dp,trackColor=Blush,color=Rose,strokeCap=StrokeCap.Round)
-                                                Column(horizontalAlignment=Alignment.CenterHorizontally){Text("%02d:%02d".format(left/60000,(left/1000)%60),fontSize=45.sp,color=Ink,fontWeight=FontWeight.Light);Text(if(current.running)"IN YOUR ELEMENT" else "A MOMENT TO BEGIN",fontSize=10.sp,letterSpacing=1.6.sp,color=Sub)}
-                                            }
-                                            Spacer(Modifier.height(20.dp))
-                                            Row(horizontalArrangement=Arrangement.spacedBy(7.dp)){
-                                                listOf(15,25,45,60).forEach{n->FilterChip(selected=duration==n,onClick={if(!current.running){duration=n;store.configure(n);revision++}},label={Text("${n}m",fontSize=12.sp)},colors=FilterChipDefaults.filterChipColors(selectedContainerColor=Blush,selectedLabelColor=Rose))}
-                                            }
-                                            Spacer(Modifier.height(16.dp))
-                                            Button(onClick={
-                                                if(current.running){store.pause()}else{store.start()}
-                                                revision++
-                                            },modifier=Modifier.fillMaxWidth().height(56.dp),shape=RoundedCornerShape(17.dp)){
-                                                Icon(if(current.running)Icons.Rounded.Pause else Icons.Rounded.PlayArrow,null);Spacer(Modifier.width(9.dp));Text(if(current.running)"Pause focus" else if(left<current.durationMinutes*60_000L)"Resume focus" else "Begin focus",fontWeight=FontWeight.Bold)
-                                            }
-                                            if(current.running||left<current.durationMinutes*60_000L)TextButton(onClick={store.abandon();revision++}){Text("End session",color=Sub)}
-                                        }
-                                    }
-                                    Row(verticalAlignment=Alignment.CenterVertically,modifier=Modifier.fillMaxWidth()){
-                                        Text("Soundscapes",fontSize=19.sp,fontWeight=FontWeight.Bold,color=Ink,modifier=Modifier.weight(1f))
-                                        TextButton(onClick={openSound=true}){Text("See all",color=Rose)}
-                                    }
-                                    Surface(shape=RoundedCornerShape(22.dp),color=Color.White){
-                                        Row(Modifier.fillMaxWidth().padding(15.dp),verticalAlignment=Alignment.CenterVertically){
-                                            Surface(shape=RoundedCornerShape(15.dp),color=Blush){Icon(Icons.Rounded.GraphicEq,null,tint=Rose,modifier=Modifier.padding(14.dp))}
-                                            Spacer(Modifier.width(12.dp))
-                                            Column(Modifier.weight(1f)){Text(Ambients.all.first{it.id==sound}.label,fontWeight=FontWeight.Bold,color=Ink);Text("Offline ambience",fontSize=12.sp,color=Sub)}
-                                            IconButton(onClick={
-                                                if(playing){stopService(Intent(this@MainActivity,SoundService::class.java));playing=false}
-                                                else {val i=Intent(this@MainActivity,SoundService::class.java).putExtra("sound",sound);try{startForegroundService(i);playing=true}catch (_:Exception){playing=false}}
-                                            }){Icon(if(playing)Icons.Rounded.StopCircle else Icons.Rounded.PlayCircle,null,tint=Rose,modifier=Modifier.size(32.dp))}
-                                        }
-                                    }
-                                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){
-                                        MiniMetric("${today} min","TODAY",Modifier.weight(1f))
-                                        MiniMetric("${store.dailyGoal()} min","DAILY GOAL",Modifier.weight(1f))
-                                    }
+                                        },
+                                        onOpenPlanner={page=1}
+                                    )
                                 }
                                 1->{
                                     Header("Plan with purpose.","A little structure, more room to breathe.")
@@ -236,7 +211,7 @@ class MainActivity:ComponentActivity(){
                                     Surface(shape=RoundedCornerShape(23.dp),color=Color.White){
                                         Column(Modifier.padding(20.dp)){
                                             Text("Small steps become chapters",fontSize=18.sp,fontWeight=FontWeight.Bold,color=Ink)
-                                            TurtleScene(stage,Modifier.fillMaxWidth().height(195.dp))
+                                            TurtleAtelier(stage,Modifier.fillMaxWidth().height(195.dp))
                                             Text("Your companion evolves only after completed focus sessions.",color=Sub,fontSize=13.sp)
                                         }
                                     }
@@ -256,6 +231,23 @@ class MainActivity:ComponentActivity(){
                                             }
                                             Text("Requires system permission. Android may allow priority calls, alarms and user-defined exceptions.",fontSize=11.sp,color=Sub)
                                             TextButton(onClick={startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))}){Text("Manage interruption access")}
+                                            if(Build.VERSION.SDK_INT>=31){
+                                                Spacer(Modifier.height(8.dp))
+                                                HorizontalDivider(color=Border)
+                                                Spacer(Modifier.height(12.dp))
+                                                Text("Precise session alerts",fontWeight=FontWeight.Bold,color=Ink)
+                                                Text(
+                                                    if(FocusAlarms.preciseAllowed(this@MainActivity))
+                                                        "Enabled. Session completion uses exact Android alarms."
+                                                    else "Optional permission. Without it, Android may delay an end alert in battery saver.",
+                                                    fontSize=12.sp,color=Sub)
+                                                if(!FocusAlarms.preciseAllowed(this@MainActivity)){
+                                                    TextButton(onClick={
+                                                        startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                                                            Uri.parse("package:"+packageName)))
+                                                    }){Text("Allow precise session alerts")}
+                                                }
+                                            }
                                             HorizontalDivider(color=Border)
                                             Spacer(Modifier.height(12.dp))
                                             Text("Sound volume",fontWeight=FontWeight.Bold)
@@ -340,66 +332,4 @@ class MainActivity:ComponentActivity(){
             if(item!=null)TextButton(onClick={onDelete(item)}){Text("Delete task",color=Rose)}
         }
     },confirmButton={TextButton(enabled=title.isNotBlank(),onClick={onSave(title.trim(),date,time,duration,remind)}){Text("Save plan")}},dismissButton={TextButton(onClick=onDismiss){Text("Cancel")}})
-}
-
-@Composable private fun TurtleScene(stage:Int,modifier:Modifier=Modifier){
-    val transition=rememberInfiniteTransition(label="breathing")
-    val breathe by transition.animateFloat(initialValue=.96f,targetValue=1.035f,animationSpec=infiniteRepeatable(tween(1800,easing=FastOutSlowInEasing),RepeatMode.Reverse),label="float")
-    val drift by transition.animateFloat(initialValue=-3.5f,targetValue=3.5f,animationSpec=infiniteRepeatable(tween(2300,easing=EaseInOutSine),RepeatMode.Reverse),label="drift")
-    val crack by animateFloatAsState(targetValue=if(stage>=1)1f else 0f,animationSpec=spring(dampingRatio=Spring.DampingRatioMediumBouncy,stiffness=Spring.StiffnessLow),label="crack")
-    val open by animateFloatAsState(targetValue=if(stage>=2)1f else 0f,animationSpec=spring(dampingRatio=Spring.DampingRatioLowBouncy,stiffness=Spring.StiffnessVeryLow),label="hatch")
-    val sizeScale by animateFloatAsState(targetValue=when(stage){3->.69f;4->.88f;5->1.05f;else->.7f},animationSpec=spring(dampingRatio=Spring.DampingRatioMediumBouncy,stiffness=Spring.StiffnessVeryLow),label="grow")
-    Canvas(modifier){
-        val k=min(size.width/250f,size.height/220f)
-        drawContext.transform.translate(size.width/2f,size.height/2f)
-        drawContext.transform.scale(k,k,Offset.Zero)
-        drawOval(Color(0xFFEDE4E5),Offset(-87f,82f),Size(174f,15f))
-        drawCircle(Blush,98f,Offset.Zero,alpha=.25f)
-        if(stage<=2){
-            val floating=drift
-            if(stage==2){
-                drawOval(Green,Offset(-38f,-59f+floating),Size(76f,93f))
-                drawCircle(Ink,4.3f,Offset(-16f,-31f+floating));drawCircle(Ink,4.3f,Offset(16f,-31f+floating))
-                drawArc(Ink,15f,150f,false,Offset(-10f,-28f+floating),Size(20f,15f),style=Stroke(width=2.2f))
-            }
-            drawOval(Color(0xFFE6CCCF),Offset(-63f,-75f+floating),Size(126f,160f))
-            drawOval(Color(0xFFFFF7F1),Offset(-57f,-71f+floating),Size(114f,150f))
-            val jagged=Path().apply{
-                moveTo(-55f,-8f+floating);lineTo(-35f,-19f+floating);lineTo(-24f,-8f+floating)
-                lineTo(-9f,-27f+floating);lineTo(9f,-11f+floating);lineTo(25f,-26f+floating)
-                lineTo(39f,-14f+floating);lineTo(56f,-23f+floating)
-            }
-            if(stage>=1)drawPath(jagged,Rose,alpha=crack,style=Stroke(3.1f,cap=StrokeCap.Round,join=StrokeJoin.Round))
-            if(stage==2){
-                val topY=-open*40f
-                drawArc(Color(0xFFFFF7F1),180f,180f,true,Offset(-57f,-75f+floating+topY),Size(114f,80f))
-                drawPath(jagged,Rose,style=Stroke(2.5f))
-                drawArc(Color(0xFFE3CED0),0f,180f,false,Offset(-60f,7f+floating),Size(120f,79f),style=Stroke(4f))
-            }
-        }else{
-            drawContext.transform.scale(sizeScale*breathe,sizeScale*breathe,Offset.Zero)
-            val y=drift
-            drawOval(Green,Offset(-72f,24f+y),Size(52f,45f))
-            drawOval(Green,Offset(22f,24f+y),Size(52f,45f))
-            drawOval(Green,Offset(-74f,-23f+y),Size(38f,41f))
-            drawOval(Green,Offset(37f,-23f+y),Size(38f,41f))
-            val tail=Path().apply{moveTo(3f,69f+y);lineTo(-9f,87f+y);lineTo(-19f,65f+y);close()}
-            drawPath(tail,Green)
-            drawOval(DarkGreen,Offset(-63f,-46f+y),Size(126f,120f))
-            drawOval(Color(0xFF578B76),Offset(-52f,-36f+y),Size(104f,100f))
-            val seam=Color(0xFF9CC4AA)
-            drawLine(seam,Offset(0f,-30f+y),Offset(0f,62f+y),3f)
-            drawLine(seam,Offset(-48f,17f+y),Offset(48f,17f+y),3f)
-            drawLine(seam,Offset(-42f,-11f+y),Offset(0f,17f+y),3f)
-            drawLine(seam,Offset(42f,-11f+y),Offset(0f,17f+y),3f)
-            drawLine(seam,Offset(-40f,42f+y),Offset(0f,17f+y),3f)
-            drawLine(seam,Offset(40f,42f+y),Offset(0f,17f+y),3f)
-            drawOval(Green,Offset(-51f,-89f+y),Size(102f,80f))
-            drawCircle(Ink,5f,Offset(-20f,-51f+y));drawCircle(Ink,5f,Offset(20f,-51f+y))
-            drawCircle(Color.White,1.8f,Offset(-21.5f,-53f+y));drawCircle(Color.White,1.8f,Offset(18.5f,-53f+y))
-            drawArc(Ink,10f,160f,false,Offset(-13f,-42f+y),Size(26f,15f),style=Stroke(2.5f))
-            drawCircle(Color(0xFFDB9E9A),7f,Offset(-38f,-41f+y),alpha=.55f)
-            drawCircle(Color(0xFFDB9E9A),7f,Offset(38f,-41f+y),alpha=.55f)
-        }
-    }
 }

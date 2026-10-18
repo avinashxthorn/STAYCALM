@@ -38,6 +38,7 @@ class SoundService:Service(){
         when(intent?.action){
             "stop"->{stopSelf();return START_NOT_STICKY}
             "volume"->{applyVolume();return START_NOT_STICKY}
+            "pause"->{player?.pause();setPlayback(false);return START_NOT_STICKY}
         }
         val sound=intent?.getStringExtra("sound")?:"rain"
         val label=Ambients.all.firstOrNull{it.id==sound}?.label?:"Ambient sound"
@@ -61,9 +62,12 @@ class SoundService:Service(){
                 start()
             }
             current=sound
-            if(player==null)stopSelf()
-        }else{applyVolume();if(player?.isPlaying==false)player?.start()}
+            if(player==null){setPlayback(false);stopSelf()}else setPlayback(true)
+        }else{applyVolume();if(player?.isPlaying==false)player?.start();setPlayback(true)}
         return START_NOT_STICKY
+    }
+    private fun setPlayback(playing:Boolean){
+        getSharedPreferences("staycalm_v2",MODE_PRIVATE).edit().putBoolean("audio_playing",playing).apply()
     }
     private fun applyVolumeTo(p:MediaPlayer){
         val v=FocusStore(this).soundVolume().coerceIn(0f,1f)
@@ -75,5 +79,5 @@ class SoundService:Service(){
         @Suppress("DEPRECATION")
         runCatching{audio?.abandonAudioFocus(focusListener)}
     }
-    override fun onDestroy(){releaseAudio();super.onDestroy()}
+    override fun onDestroy(){setPlayback(false);releaseAudio();super.onDestroy()}
 }
