@@ -124,7 +124,7 @@ class MainActivity:ComponentActivity(){
                                         onSoundSelect={openSound=true},
                                         onSoundToggle={
                                             if(playing){
-                                                stopService(Intent(this@MainActivity,SoundService::class.java))
+                                                startService(Intent(this@MainActivity,SoundService::class.java).setAction("pause"))
                                                 playing=false
                                             }else{
                                                 try{

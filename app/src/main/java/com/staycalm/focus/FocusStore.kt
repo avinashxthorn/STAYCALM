@@ -66,8 +66,11 @@ class FocusStore(private val context: Context) {
             .putString("current_task",s.taskId).commit()
     }
     private fun sameBoot(s:FocusState):Boolean = kotlin.math.abs((System.currentTimeMillis()-SystemClock.elapsedRealtime())-s.bootOrigin)<120_000
-    fun remaining(s:FocusState=state()):Long = if(!s.running) s.remainingMs else
-        (if(sameBoot(s))s.endElapsed-SystemClock.elapsedRealtime() else s.endWall-System.currentTimeMillis()).coerceAtLeast(0)
+    fun remaining(s:FocusState=state()):Long=FocusClock.remainingMs(
+        running=s.running,pausedMs=s.remainingMs,endElapsed=s.endElapsed,
+        endWall=s.endWall,bootOrigin=s.bootOrigin,
+        nowElapsed=SystemClock.elapsedRealtime(),nowWall=System.currentTimeMillis()
+    )
     @Synchronized fun configure(minutes:Int,taskId:String=""){
         val s=state();if(s.running)return
         save(s.copy(durationMinutes=minutes.coerceIn(5,180),remainingMs=minutes.coerceIn(5,180)*60_000L,taskId=taskId))
@@ -88,7 +91,7 @@ class FocusStore(private val context: Context) {
     @Synchronized fun abandon(){
         val s=state()
         save(s.copy(running=false,remainingMs=s.durationMinutes*60_000L,endWall=0L,endElapsed=0L))
-        FocusAlarms.cancelFocus(context);FocusDnd.exit(context)
+        FocusAlarms.cancelFocus(context);Notice.sessionStopped(context);FocusDnd.exit(context)
     }
     @Synchronized fun completeIfDue():Boolean {
         val s=state();if(!s.running||remaining(s)>0)return false

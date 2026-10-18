@@ -25,9 +25,9 @@ class SoundService:Service(){
     private var audio:AudioManager?=null
     @Suppress("DEPRECATION")
     private val focusListener=AudioManager.OnAudioFocusChangeListener { state->
-        if(state==AudioManager.AUDIOFOCUS_LOSS){stopSelf()}
-        else if(state==AudioManager.AUDIOFOCUS_LOSS_TRANSIENT){player?.pause()}
-        else if(state==AudioManager.AUDIOFOCUS_GAIN){player?.start()}
+        if(state==AudioManager.AUDIOFOCUS_LOSS){setPlayback(false);stopSelf()}
+        else if(state==AudioManager.AUDIOFOCUS_LOSS_TRANSIENT){player?.pause();setPlayback(false)}
+        else if(state==AudioManager.AUDIOFOCUS_GAIN){player?.start();setPlayback(true)}
     }
     override fun onBind(intent:Intent?)=null
     override fun onCreate(){super.onCreate()
