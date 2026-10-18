@@ -59,6 +59,7 @@ private val StaycalmDarkColors=darkColorScheme(primary=Color(0xFFD66A9D),onPrima
 
 class MainActivity:ComponentActivity(){
     private lateinit var store:FocusStore
+    override fun onResume(){super.onResume();if(::store.isInitialized){store.completeIfDue();TimerService.ensureRunning(this)}}
     override fun onCreate(savedInstanceState:android.os.Bundle?){super.onCreate(savedInstanceState);store=FocusStore(this);Notice.channels(this);LauncherIconSwitcher.apply(this,Personalization(this).darkMode())
         setContent {
             val personalization=remember{Personalization(this@MainActivity)}
@@ -121,6 +122,7 @@ class MainActivity:ComponentActivity(){
                 }
             }
             var showReset by remember{mutableStateOf(false)}
+            var cancellationError by remember{mutableStateOf<String?>(null)}
             var intention by remember{mutableStateOf(store.intention())}
             var completion by remember{mutableStateOf(store.completion())}
             var mode by remember{mutableStateOf(store.state().mode)}
@@ -145,6 +147,8 @@ class MainActivity:ComponentActivity(){
             }}
             val current=remember(revision,tick){store.state()}
             val left=remember(current,tick){store.remaining(current)}
+            val rewardBalance=remember(revision,tick){store.rewardBalance()}
+            val freeCancellations=remember(revision,tick){store.freeCancellationsRemaining()}
             val logs=remember(revision){store.logs()}
             val plans=remember(revision){store.tasks()}
             val journalFiles=remember(selectedDate,journalRevision){journal.all().filter{it.date==selectedDate.toString()}}
@@ -195,7 +199,7 @@ class MainActivity:ComponentActivity(){
                                     StudioFocus(
                                         mode=mode,intention=intention,
                                         onIntention={intention=it;store.setIntention(it)},
-                                        onMode={newMode->mode=newMode;store.configure(if(newMode=="break")5 else 25,mode=newMode);revision++},
+                                        onMode={newMode->store.configure(if(newMode=="break")5 else 25,mode=newMode);mode=store.state().mode;revision++},
                                         durationMinutes=current.durationMinutes,
                                         remainingMs=left,
                                         running=current.running,
@@ -204,7 +208,7 @@ class MainActivity:ComponentActivity(){
                                         dailyGoal=store.dailyGoal(),
                                         selectedSound=audioLibrary.find(sound),
                                         onImport={audioPicker.launch(arrayOf("audio/*"))},importing=importing,
-                                        onDuration={newMinutes->duration=newMinutes;store.configure(newMinutes,mode=mode);revision++},
+                                        onDuration={newMinutes->store.configure(newMinutes,mode=mode);duration=store.state().durationMinutes;revision++},
                                         onToggle={
                                             if(current.running)store.pause()else store.start()
                                             revision++
@@ -213,6 +217,13 @@ class MainActivity:ComponentActivity(){
                                         onSoundSelect={openSound=true},
                                         onOpenPlanner={page=1}
                                     )
+                                    Surface(shape=RoundedCornerShape(22.dp),color=Blush){
+                                        Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
+                                            Text("★ $rewardBalance reward points",fontWeight=FontWeight.Bold,fontSize=18.sp,color=Rose)
+                                            Text("Complete a focus session: earn 1 point per full hour. $freeCancellations of 3 free cancellations left.",fontSize=12.sp,color=Sub)
+                                            Text("After your free cancellations, ending a focus session costs 1 point. With no points, finish or pause the session.",fontSize=12.sp,color=Sub)
+                                        }
+                                    }
                                 }
                                 1->{
                                     Header("Plan with purpose.","A little structure, more room to breathe.")
@@ -252,7 +263,7 @@ class MainActivity:ComponentActivity(){
                                                 Checkbox(checked=task.done,onCheckedChange={store.replaceTask(task.copy(done=it));revision++},colors=CheckboxDefaults.colors(checkedColor=Rose))
                                                 Column(Modifier.weight(1f)){Text(task.title,fontWeight=FontWeight.SemiBold,color=if(task.done)Sub else Ink,textDecoration=if(task.done)TextDecoration.LineThrough else null)
                                                     Text("${task.time}  ·  ${task.duration} min${if(task.remind)"  ·  Reminder" else ""}",color=Sub,fontSize=11.sp)}
-                                                if(!task.done)IconButton(enabled=!current.running && left==current.durationMinutes*60_000L,onClick={
+                                                if(!task.done)IconButton(enabled=current.sessionId.isEmpty() && !current.running,onClick={
                                                     store.configure(task.duration,task.id,"focus");mode="focus";intention=task.title;store.setIntention(task.title);store.start();revision++;page=0
                                                 }){Icon(Icons.Rounded.PlayCircle,"Focus on ${task.title}",tint=Rose)}
                                             }
@@ -269,6 +280,10 @@ class MainActivity:ComponentActivity(){
                                 }
                                 2->{
                                     Header("Every minute matters.","A gentler look at how far you’ve come.")
+                                    Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){
+                                        MiniMetric("$rewardBalance","REWARD POINTS",Modifier.weight(1f))
+                                        MiniMetric("$freeCancellations / 3","FREE CANCELLATIONS",Modifier.weight(1f))
+                                    }
                                     val streak=FocusStats.streak(logs.map{Instant.ofEpochMilli(it.at).atZone(ZoneId.systemDefault()).toLocalDate()},LocalDate.now())
                                     Surface(shape=RoundedCornerShape(24.dp),color=Blush){Row(Modifier.fillMaxWidth().padding(20.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Rounded.LocalFireDepartment,null,tint=Rose,modifier=Modifier.size(32.dp));Spacer(Modifier.width(14.dp));Column{Text("$streak day streak",fontSize=23.sp,fontWeight=FontWeight.Bold,color=Ink);Text("Small steps. A steady rhythm.",fontSize=12.sp,color=Sub)}}}
                                     Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){
@@ -374,7 +389,7 @@ class MainActivity:ComponentActivity(){
                                             Row(verticalAlignment=Alignment.CenterVertically){
                                                 Column(Modifier.weight(1f)){
                                                     Text("Lock timer notification",fontWeight=FontWeight.Bold)
-                                                    Text("Keep your focus or break countdown notification ongoing until the timer stops.",fontSize=12.sp,color=Sub)
+                                                    Text("Keep the focus or break countdown visible in the background. Dismissed alerts are restored while this is on.",fontSize=12.sp,color=Sub)
                                                 }
                                                 Switch(checked=lockedTimerNotification,onCheckedChange={
                                                     lockedTimerNotification=it
@@ -384,7 +399,8 @@ class MainActivity:ComponentActivity(){
                                                         permission.launch(Manifest.permission.POST_NOTIFICATIONS)
                                                 })
                                             }
-                                            Text("Android notification settings can still override visibility; some launchers and system versions allow dismissing ongoing alerts.",fontSize=11.sp,color=Sub)
+                                            Text("Android 14+ permits swiping ongoing alerts; the app restores the locked countdown. Pausing stops it. System notification blocking and force-stop override this setting.",fontSize=11.sp,color=Sub)
+                                            TextButton(onClick={startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,packageName))}){Text("Open notification permissions")}
                                             if(Build.VERSION.SDK_INT>=31){
                                                 Spacer(Modifier.height(8.dp))
                                                 HorizontalDivider(color=Border)
@@ -411,7 +427,7 @@ class MainActivity:ComponentActivity(){
                                     Surface(shape=RoundedCornerShape(22.dp),color=MaterialTheme.colorScheme.surface){
                                         Column(Modifier.padding(19.dp)){Text("Private by design",fontWeight=FontWeight.Bold,fontSize=17.sp);Spacer(Modifier.height(7.dp));Text("Your plans, focus history and turtle live on this device. No accounts, cloud backup, analytics trackers or AI.",color=Sub,fontSize=13.sp)}
                                     }
-                                    Text("STAYCALM · BLOOM EDITION 3.4",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
+                                    Text("STAYCALM · BLOOM EDITION 3.5",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
                                 }
                             }
                             Spacer(Modifier.height(24.dp))
@@ -433,7 +449,24 @@ class MainActivity:ComponentActivity(){
             if(journalError!=null)AlertDialog(onDismissRequest={journalError=null},
                 title={Text("Work archive")},text={Text(journalError.orEmpty())},
                 confirmButton={TextButton(onClick={journalError=null}){Text("OK")}})
-            if(showReset)AlertDialog(onDismissRequest={showReset=false},title={Text("End this moment?")},text={Text("This session’s unfinished minutes won’t count toward your progress.")},confirmButton={TextButton(onClick={store.abandon();revision++;showReset=false}){Text("End session")}},dismissButton={TextButton(onClick={showReset=false}){Text("Keep going")}})
+            if(showReset){
+                val cost=store.cancellationCost()
+                val canCancel=current.mode=="break" || cost==0L || rewardBalance>=cost
+                AlertDialog(onDismissRequest={showReset=false},title={Text("End this moment?")},text={Text(
+                    if(current.mode=="break") "End this break for free."
+                    else if(freeCancellations>0) "Use 1 free cancellation? $freeCancellations remaining. Unfinished focus earns no points."
+                    else if(canCancel) "Ending this focus session costs 1 reward point. Balance: $rewardBalance. Unfinished focus earns no points."
+                    else "No free cancellations or reward points left. Complete this session to earn points, or pause and resume later."
+                )},confirmButton={TextButton(enabled=canCancel,onClick={
+                    when(store.abandon()){
+                        CancellationResult.INSUFFICIENT_POINTS->cancellationError="You need 1 reward point to cancel. Finish this session or pause and resume later."
+                        CancellationResult.SAVE_FAILED->cancellationError="Could not save this change. Please try again."
+                        else->Unit
+                    }
+                    revision++;showReset=false
+                }){Text("End session")}},dismissButton={TextButton(onClick={showReset=false}){Text("Keep going")}})
+            }
+            if(cancellationError!=null)AlertDialog(onDismissRequest={cancellationError=null},title={Text("Session kept")},text={Text(cancellationError.orEmpty())},confirmButton={TextButton(onClick={cancellationError=null}){Text("OK")}})
             if(completion!=null)AlertDialog(onDismissRequest={store.dismissCompletion();completion=null},icon={Icon(Icons.Rounded.LocalFlorist,null,tint=Rose)},title={Text(if(mode=="focus")"A little more bloomed." else "Welcome back.")},text={Text(completion.orEmpty())},confirmButton={TextButton(onClick={store.dismissCompletion();completion=null;mode=if(mode=="focus")"break" else "focus";store.configure(if(mode=="break")5 else 25,mode=mode);revision++}){Text(if(mode=="focus")"Take a 5-minute break" else "Back to focus")}},dismissButton={TextButton(onClick={store.dismissCompletion();completion=null}){Text("Lovely")}})
             if(importError!=null)AlertDialog(onDismissRequest={importError=null},title={Text("Audio could not be added")},text={Text(importError.orEmpty())},confirmButton={TextButton(onClick={importError=null}){Text("OK")}})
             if(openSound)AlertDialog(onDismissRequest={openSound=false},title={Text("Your focus audio")},text={

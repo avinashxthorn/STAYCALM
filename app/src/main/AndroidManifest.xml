@@ -5,6 +5,7 @@
   <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY"/>
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
   <application
       android:label="STAYCALM"
@@ -42,6 +43,10 @@
       <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/journal_paths"/>
     </provider>
     <receiver android:name=".QuoteReceiver" android:exported="false"/>
+    <service android:name=".TimerService" android:exported="false" android:foregroundServiceType="specialUse">
+      <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+          android:value="User-started focus and break countdown with a persistent locked notification and timely completion, including silent sessions."/>
+    </service>
     <service android:name=".SoundService" android:exported="false" android:foregroundServiceType="mediaPlayback"/>
     <receiver android:name=".AlarmReceiver" android:exported="false"/>
     <receiver android:name=".BootReceiver" android:exported="false">

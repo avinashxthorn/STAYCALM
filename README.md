@@ -44,3 +44,14 @@ New users see a three-page swipeable intro to focus sessions, their dated work a
 progress and study encouragement. **Get started** opens a separate, local-only profile page
 with a required name, an optional subject, a daily goal and optional motivation reminders.
 Saving the profile opens the Focus tab. Existing profiles skip onboarding on subsequent launches.
+
+
+### Rewards and cancellation rules (v3.5)
+
+- Completing a focus session earns one point per full hour in that session (60m = 1, 120m = 2, 180m = 3). Shorter sessions do not accumulate toward a point; unfinished sessions and breaks earn none. Existing history is unchanged.
+- Each installation gets three lifetime free focus cancellations. Later cancellations cost one point; a zero balance blocks cancellation. Break cancellation and pausing are free. A paused session must be resumed or cancelled before its mode, task or duration can change.
+- Rewards, cancellation charges, allowance usage and session reset persist in one preferences transaction. A shared lock serializes Activity, alarm and service operations so duplicate completion/cancellation callbacks cannot credit or charge twice.
+- Balances and allowances persist through restarts and app updates. Clearing app data or uninstalling clears these device-local records.
+- Locked focus and break notifications use a dedicated foreground timer service, including silent sessions. Android 14+ permits individual swipes while unlocked, so locked notifications are restored on deletion and checked by the service. Turning the lock off makes the notification dismissible and stops restoration. Pause, cancellation and completion remove it. Android notification permissions, force-stop and manufacturer restrictions remain system-controlled.
+
+Verification includes full-hour boundaries, zero-balance cancellation, three free cancellations, paused-session configuration protection, concurrent callbacks, persisted balances, deadline cancellation and silent focus/break notification lock toggles.

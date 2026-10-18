@@ -17,3 +17,13 @@ Reports and screenshots are uploaded by the main build workflow. A workflow is o
 - Listen for acceptable soundscape loop boundaries.
 
 No finite set of checks can guarantee an app has no defects on every Android device.
+
+
+## v3.5 rewards and timer notification
+- [ ] Complete 59/60/120/180-minute focus sessions: +0/+1/+2/+3 points, exactly once.
+- [ ] Three focus cancellations are free; the fourth deducts one point or is refused at zero balance.
+- [ ] Pause/restart/recreate and change mode/duration/task attempts cannot reset an active session.
+- [ ] Concurrent completion and cancellation callbacks cannot double-credit or double-charge.
+- [ ] Cancelling an already-due session completes it without a charge; breaks never change rewards or allowances.
+- [ ] Locked silent focus and break countdowns appear, restore after dismissal, unlock immediately and disappear on pause/end/completion.
+- [ ] Notification permission denial does not crash; notification settings link opens Android controls.

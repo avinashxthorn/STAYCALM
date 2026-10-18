@@ -89,7 +89,7 @@ fun StudioFocus(
                     }
                 }
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)){
-                    (if(mode=="focus")listOf(15,25,45) else listOf(5,10,15)).forEach{minutes->
+                    (if(mode=="focus")listOf(25,45,60) else listOf(5,10,15)).forEach{minutes->
                         Surface(onClick={onDuration(minutes)},enabled=!active,modifier=Modifier.weight(1f).height(48.dp),shape=RoundedCornerShape(14.dp),color=if(durationMinutes==minutes)MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surface.copy(alpha=.2f),border=if(durationMinutes==minutes)BorderStroke(1.dp,Color(0xFFE8B0C5)) else null){
                             Box(contentAlignment=Alignment.Center){Text("${minutes}m",fontSize=13.sp,fontWeight=FontWeight.Bold,color=plumInk)}
                         }

@@ -18,7 +18,7 @@ import kotlin.math.roundToInt
 data class PlanItem(val id: String, val title: String, val date: String, val time: String, val duration: Int, val done: Boolean, val remind: Boolean)
 data class FocusLog(val id: String, val at: Long, val minutes: Int, val taskId: String, val intention: String = "")
 data class FocusState(val running: Boolean = false, val remainingMs: Long = 25*60_000L, val durationMinutes: Int = 25,
-    val endElapsed: Long = 0L, val endWall: Long = 0L, val bootOrigin: Long = 0L, val taskId: String = "", val mode: String = "focus", val bootCount: Int = -1)
+    val endElapsed: Long = 0L, val endWall: Long = 0L, val bootOrigin: Long = 0L, val taskId: String = "", val mode: String = "focus", val bootCount: Int = -1, val sessionId: String = "")
 
 object Evolution {
     private val thresholds = intArrayOf(0,30,90,180,360,720)
@@ -28,6 +28,8 @@ object Evolution {
 }
 
 class FocusStore(private val context: Context) {
+    // All Activity, service and receiver instances share one transaction lock.
+    companion object { private val timerLock = Any() }
     private val prefs=context.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE)
     private fun parsePlan(o:JSONObject) = PlanItem(o.optString("id"),o.optString("title"),o.optString("date"),o.optString("time"),o.optInt("duration",25),o.optBoolean("done"),o.optBoolean("remind"))
     private fun encode(p:PlanItem)=JSONObject().put("id",p.id).put("title",p.title).put("date",p.date).put("time",p.time).put("duration",p.duration).put("done",p.done).put("remind",p.remind)
@@ -57,7 +59,7 @@ class FocusStore(private val context: Context) {
     fun setLockTimerNotification(value:Boolean){
         prefs.edit().putBoolean("lock_timer_notification",value).apply()
         val s=state()
-        if(s.running) Notice.sessionStarted(context,s.endWall,s.mode)
+        if(s.running) { Notice.sessionStarted(context,s.endWall,s.mode); TimerService.ensureRunning(context) }
     }
     fun enableDnd():Boolean=prefs.getBoolean("focus_dnd",false)
     fun setDnd(value:Boolean){prefs.edit().putBoolean("focus_dnd",value).apply()}
@@ -65,15 +67,24 @@ class FocusStore(private val context: Context) {
     fun setVolume(v:Float){prefs.edit().putFloat("volume",v).apply()}
     fun lastSound():String=AudioLibrary(context).find(prefs.getString("sound",Ambients.all.first().id)?:Ambients.all.first().id).id
     fun setSound(s:String){prefs.edit().putString("sound",s).apply()}
-    @Synchronized fun state():FocusState=FocusState(
-        prefs.getBoolean("running",false),prefs.getLong("remaining",25*60_000L),
-        prefs.getInt("duration",25),prefs.getLong("end_elapsed",0),
-        prefs.getLong("end_wall",0),prefs.getLong("boot_origin",0),prefs.getString("current_task","")?:"",prefs.getString("mode","focus")?:"focus",prefs.getInt("boot_count",-1))
+    fun rewardBalance():Long = synchronized(timerLock) { prefs.getLong("reward_balance",0L).coerceAtLeast(0L) }
+    fun freeCancellationsRemaining():Int = synchronized(timerLock) { RewardPolicy.freeRemaining(prefs.getInt("free_cancellations_used",0)) }
+    fun cancellationCost():Long = synchronized(timerLock) { RewardPolicy.cancellationCost(prefs.getInt("free_cancellations_used",0),state().mode) }
+    fun state():FocusState = synchronized(timerLock) {
+        val running=prefs.getBoolean("running",false)
+        val duration=prefs.getInt("duration",25)
+        val remaining=prefs.getLong("remaining",25*60_000L)
+        // Preserve an existing running/paused session when upgrading from v3.4.
+        val id=prefs.getString("session_id",null) ?: if(running || remaining<duration*60_000L) "legacy-session" else ""
+        FocusState(running,remaining,duration,prefs.getLong("end_elapsed",0),
+            prefs.getLong("end_wall",0),prefs.getLong("boot_origin",0),prefs.getString("current_task","")?:"",
+            prefs.getString("mode","focus")?:"focus",prefs.getInt("boot_count",-1),id)
+    }
     private fun stateEditor(s:FocusState): android.content.SharedPreferences.Editor = prefs.edit().putBoolean("running",s.running).putLong("remaining",s.remainingMs)
             .putInt("duration",s.durationMinutes).putLong("end_elapsed",s.endElapsed)
             .putLong("end_wall",s.endWall).putLong("boot_origin",s.bootOrigin)
-            .putString("current_task",s.taskId).putString("mode",s.mode).putInt("boot_count",s.bootCount)
-    private fun save(s:FocusState){stateEditor(s).commit()}
+            .putString("current_task",s.taskId).putString("mode",s.mode).putInt("boot_count",s.bootCount).putString("session_id",s.sessionId)
+    private fun save(s:FocusState):Boolean = stateEditor(s).commit()
     private fun sameBoot(s:FocusState):Boolean = kotlin.math.abs((System.currentTimeMillis()-SystemClock.elapsedRealtime())-s.bootOrigin)<120_000
     fun remaining(s:FocusState=state()):Long=FocusClock.remainingMs(
         running=s.running,pausedMs=s.remainingMs,endElapsed=s.endElapsed,
@@ -81,46 +92,72 @@ class FocusStore(private val context: Context) {
         nowElapsed=SystemClock.elapsedRealtime(),nowWall=System.currentTimeMillis(),
         sameBootOverride=if(s.bootCount<0)null else s.bootCount==Settings.Global.getInt(context.contentResolver,Settings.Global.BOOT_COUNT,-2)
     )
-    @Synchronized fun configure(minutes:Int,taskId:String="",mode:String="focus"){
+    fun configure(minutes:Int,taskId:String="",mode:String="focus") { synchronized(timerLock) {
+        val s=state();if(s.running || s.sessionId.isNotEmpty())return
+        save(s.copy(durationMinutes=minutes.coerceIn(5,180),remainingMs=minutes.coerceIn(5,180)*60_000L,taskId=taskId,mode=if(mode=="break")"break" else "focus"))
+    } }
+    fun start() { synchronized(timerLock) {
         val s=state();if(s.running)return
-        save(s.copy(durationMinutes=minutes.coerceIn(5,180),remainingMs=minutes.coerceIn(5,180)*60_000L,taskId=taskId,mode=mode))
-    }
-    @Synchronized fun start(){
-        val s=state();if(s.running)return
-        val ms=s.remainingMs.coerceAtLeast(1000L)
+        val ms=s.remainingMs.coerceAtLeast(1L)
         val next=s.copy(running=true,endElapsed=SystemClock.elapsedRealtime()+ms,
             endWall=System.currentTimeMillis()+ms,bootOrigin=System.currentTimeMillis()-SystemClock.elapsedRealtime(),
-            bootCount=Settings.Global.getInt(context.contentResolver,Settings.Global.BOOT_COUNT,-1))
-        save(next); FocusAlarms.scheduleFocus(context,ms); Notice.sessionStarted(context,next.endWall,next.mode)
+            bootCount=Settings.Global.getInt(context.contentResolver,Settings.Global.BOOT_COUNT,-1),
+            sessionId=s.sessionId.ifEmpty{UUID.randomUUID().toString()})
+        if(!save(next))return
+        FocusAlarms.scheduleFocus(context,ms)
+        TimerService.ensureRunning(context)
         if(enableDnd() && next.mode=="focus") FocusDnd.enter(context)
-    }
-    @Synchronized fun pause(){
+    } }
+    fun pause() { synchronized(timerLock) {
         val s=state();if(!s.running)return
-        if(remaining(s)<=0){completeIfDue();return}
-        save(s.copy(running=false,remainingMs=remaining(s),endElapsed=0L,endWall=0L))
+        val left=remaining(s)
+        if(left<=0){completeIfDue();return}
+        if(!save(s.copy(running=false,remainingMs=left.coerceAtMost(s.durationMinutes*60_000L-1),endElapsed=0L,endWall=0L)))return
         FocusAlarms.cancelFocus(context);Notice.sessionStopped(context);FocusDnd.exit(context)
-    }
-    @Synchronized fun abandon(){
+    } }
+    fun abandon():CancellationResult = synchronized(timerLock) {
         val s=state()
-        save(s.copy(running=false,remainingMs=s.durationMinutes*60_000L,endWall=0L,endElapsed=0L))
+        if(s.running && remaining(s)<=0) {
+            return if(completeIfDue()) CancellationResult.COMPLETED else CancellationResult.SAVE_FAILED
+        }
+        if(s.sessionId.isEmpty())return CancellationResult.NO_SESSION
+        val used=prefs.getInt("free_cancellations_used",0)
+        val cost=RewardPolicy.cancellationCost(used,s.mode)
+        val balance=rewardBalance()
+        if(balance<cost)return CancellationResult.INSUFFICIENT_POINTS
+        val editor=stateEditor(s.copy(running=false,remainingMs=s.durationMinutes*60_000L,endWall=0L,endElapsed=0L,sessionId=""))
+        if(s.mode=="focus") {
+            if(cost==0L)editor.putInt("free_cancellations_used",(used+1).coerceAtMost(RewardPolicy.FREE_CANCELLATIONS))
+            else editor.putLong("reward_balance",balance-cost)
+        }
+        // The charge, allowance and session reset are one durable transaction.
+        if(!editor.commit())return CancellationResult.SAVE_FAILED
         FocusAlarms.cancelFocus(context);Notice.sessionStopped(context);FocusDnd.exit(context)
         context.stopService(Intent(context,SoundService::class.java))
+        if(cost>0) CancellationResult.CHARGED else CancellationResult.FREE
     }
-    @Synchronized fun completeIfDue():Boolean {
+    fun completeIfDue():Boolean = synchronized(timerLock) {
         val s=state();if(!s.running||remaining(s)>0)return false
-        // Persist the completion and reset together so a restarted process cannot credit it twice.
-        val editor=stateEditor(s.copy(running=false,remainingMs=s.durationMinutes*60_000L,endWall=0L,endElapsed=0L))
+        // Credit and reset together, under the same lock across all store instances.
+        val editor=stateEditor(s.copy(running=false,remainingMs=s.durationMinutes*60_000L,endWall=0L,endElapsed=0L,sessionId=""))
+        val earned=RewardPolicy.earnedPoints(s.durationMinutes,s.mode)
         if(s.mode=="focus"){
-            val log=FocusLog(UUID.randomUUID().toString(),s.endWall,s.durationMinutes,s.taskId,intention())
+            val log=FocusLog(s.sessionId.ifEmpty{UUID.randomUUID().toString()},s.endWall,s.durationMinutes,s.taskId,intention())
             val all=logs()+log
             editor.putString("logs",JSONArray().apply{all.forEach{put(JSONObject().put("id",it.id).put("at",it.at).put("minutes",it.minutes).put("taskId",it.taskId).put("intention",it.intention))}}.toString())
+            editor.putLong("reward_balance",rewardBalance()+earned)
         }
-        editor.putString("completion",if(s.mode=="focus")"${s.durationMinutes} minutes, just for your focus." else "Your break is complete. Ready for a fresh start?").commit()
+        val message=if(s.mode=="focus") {
+            "${s.durationMinutes} minutes, just for your focus." +
+                (if(earned>0) " +$earned reward ${if(earned==1L)"point" else "points"}!" else "")
+        } else "Your break is complete. Ready for a fresh start?"
+        if(!editor.putString("completion",message).commit())return false
         FocusAlarms.cancelFocus(context);Notice.sessionStopped(context);FocusDnd.exit(context)
         context.stopService(Intent(context,SoundService::class.java))
         Notice.finished(context,s.durationMinutes,s.mode)
-        return true
+        true
     }
+
 }
 
 object FocusDnd {
@@ -166,21 +203,32 @@ object Notice {
             .setContentTitle(title).setContentText(body).setAutoCancel(true).setContentIntent(open)
         try{context.getSystemService(NotificationManager::class.java).notify(id,builder.build())}catch (_:SecurityException){}
     }
-    fun sessionStarted(context:Context,finishAt:Long,mode:String="focus"){
+    fun sessionNotification(context:Context,finishAt:Long,mode:String="focus"):Notification {
         channels(context)
+        val locked=FocusStore(context).lockTimerNotification()
         val pending=PendingIntent.getActivity(context,1002,Intent(context,MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val notification=Notification.Builder(context,ACTIVE)
+        val builder=Notification.Builder(context,ACTIVE)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(if(mode=="focus")"STAYCALM · In focus" else "STAYCALM · On a break")
-            .setContentText("Your session is in progress")
+            .setContentText(if(locked) "Timer notification locked · tap to open" else "Your session is in progress")
             .setWhen(finishAt).setUsesChronometer(true).setChronometerCountDown(true)
-            .setOngoing(FocusStore(context).lockTimerNotification()).setOnlyAlertOnce(true).setContentIntent(pending)
-            .addAction(Notification.Action.Builder(android.R.drawable.ic_media_pause,"Pause",
-                PendingIntent.getBroadcast(context,1003,Intent(context,AlarmReceiver::class.java).setAction("pause"),PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)).build()).build()
-        try{context.getSystemService(NotificationManager::class.java).notify(1002,notification)}catch (_:SecurityException){}
+            .setOngoing(locked).setAutoCancel(false).setOnlyAlertOnce(true).setContentIntent(pending)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+        if(locked)builder.setDeleteIntent(PendingIntent.getBroadcast(context,1004,
+            Intent(context,AlarmReceiver::class.java).setAction("timer_notification_dismissed"),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+        builder.addAction(Notification.Action.Builder(android.R.drawable.ic_media_pause,"Pause",
+            PendingIntent.getBroadcast(context,1003,Intent(context,AlarmReceiver::class.java).setAction("pause"),PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)).build())
+        return builder.build()
     }
-    fun sessionStopped(context:Context){context.getSystemService(NotificationManager::class.java).cancel(1002)}
+    fun sessionStarted(context:Context,finishAt:Long,mode:String="focus"){
+        try{context.getSystemService(NotificationManager::class.java).notify(1002,sessionNotification(context,finishAt,mode))}catch (_:SecurityException){}
+    }
+    fun sessionStopped(context:Context){
+        context.stopService(Intent(context,TimerService::class.java))
+        context.getSystemService(NotificationManager::class.java).cancel(1002)
+    }
     fun finished(context:Context,minutes:Int,mode:String)=post(context,FINISH,1001,if(mode=="focus")"Focus completed" else "Break completed",if(mode=="focus")"Your ${minutes}-minute session is complete. Your turtle grew." else "Time for a fresh start.")
     fun reminder(context:Context,item:PlanItem)=post(context,REMIND,item.id.hashCode(),"Up next · ${item.title}","Scheduled for ${item.time} · ${item.duration} minutes")
 }
@@ -214,6 +262,13 @@ object FocusAlarms {
 class AlarmReceiver:BroadcastReceiver(){
     override fun onReceive(context:Context,intent:Intent){
         if(intent.action=="pause"){FocusStore(context).pause()}
+        if(intent.action=="timer_notification_dismissed"){
+            val store=FocusStore(context)
+            if(store.lockTimerNotification() && !store.completeIfDue()){
+                val state=store.state()
+                if(state.running)Notice.sessionStarted(context,state.endWall,state.mode)
+            }
+        }
         if(intent.action=="focus"){
             val store=FocusStore(context)
             if(!store.completeIfDue() && store.state().running)FocusAlarms.scheduleFocus(context,store.remaining())
@@ -233,7 +288,7 @@ class BootReceiver:BroadcastReceiver(){
         val state=store.state()
         if(state.running){
             FocusAlarms.scheduleFocus(context,store.remaining(state))
-            Notice.sessionStarted(context,state.endWall,state.mode)
+            TimerService.ensureRunning(context)
         }
         store.tasks().filter{it.remind&&!it.done}.forEach{FocusAlarms.scheduleTask(context,it)}
         MotivationAlarms.schedule(context)

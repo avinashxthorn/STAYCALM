@@ -19,7 +19,9 @@ class AppFlowTest {
     @get:Rule(order=1) val ui=createAndroidComposeRule<MainActivity>()
     @Before fun reset(){
         ui.runOnUiThread{
-            FocusStore(ui.activity).abandon()
+            ui.activity.stopService(android.content.Intent(ui.activity,SoundService::class.java))
+            ui.activity.stopService(android.content.Intent(ui.activity,TimerService::class.java))
+            Notice.sessionStopped(ui.activity)
             ui.activity.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE).edit().clear().commit()
             Personalization(ui.activity).saveProfile("Test Student","Veterinary medicine")
         }
@@ -217,6 +219,106 @@ class AppFlowTest {
         }
         ui.waitUntil(5_000){AudioPlayback.state.id.isEmpty()}
         ui.runOnUiThread{assertEquals(1,FocusStore(ui.activity).logs().size)}
+    }
+
+    @Test fun rewardsAndCancellationTransactionsSurviveNewStoreInstances(){
+        ui.runOnUiThread {
+            val context=ui.activity
+            fun store()=FocusStore(context)
+            val prefs=context.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE)
+            fun due(minutes:Int,mode:String="focus"){
+                store().configure(minutes,mode=mode);store().start()
+                prefs.edit().putLong("end_elapsed",SystemClock.elapsedRealtime()-100)
+                    .putLong("end_wall",System.currentTimeMillis()-100).commit()
+            }
+            // Three lifetime free cancellations, including paused sessions.
+            repeat(3){
+                store().configure(60);store().start();store().pause()
+                assertEquals(CancellationResult.FREE,store().abandon())
+                assertEquals(CancellationResult.NO_SESSION,store().abandon())
+            }
+            assertEquals(0,store().freeCancellationsRemaining())
+            assertEquals(0L,store().rewardBalance())
+            store().configure(60);store().start();store().pause()
+            val before=store().state()
+            assertEquals(CancellationResult.INSUFFICIENT_POINTS,store().abandon())
+            store().configure(5,mode="break")
+            assertEquals(before,store().state())
+            // Resume without losing the active session identity and earn once.
+            store().start()
+            prefs.edit().putLong("end_elapsed",SystemClock.elapsedRealtime()-100)
+                .putLong("end_wall",System.currentTimeMillis()-100).commit()
+            assertTrue(store().completeIfDue())
+            assertFalse(store().completeIfDue())
+            assertEquals(1L,store().rewardBalance())
+            assertEquals(1,store().logs().size)
+            store().configure(60);store().start()
+            assertEquals(CancellationResult.CHARGED,store().abandon())
+            assertEquals(CancellationResult.NO_SESSION,store().abandon())
+            assertEquals(0L,store().rewardBalance())
+            due(59);assertTrue(store().completeIfDue());assertEquals(0L,store().rewardBalance())
+            due(120);assertTrue(store().completeIfDue());assertEquals(2L,store().rewardBalance())
+            due(60,"break");assertTrue(store().completeIfDue());assertEquals(2L,store().rewardBalance())
+            store().configure(5,mode="break");store().start()
+            assertEquals(CancellationResult.FREE,store().abandon())
+            assertEquals(2L,store().rewardBalance())
+            assertEquals(0,store().freeCancellationsRemaining())
+            // A cancellation at the deadline completes and credits instead of charging.
+            due(60);assertEquals(CancellationResult.COMPLETED,store().abandon())
+            assertEquals(3L,store().rewardBalance())
+        }
+        ui.activityRule.scenario.recreate()
+        ui.runOnUiThread{
+            assertEquals(3L,FocusStore(ui.activity).rewardBalance())
+            assertEquals(0,FocusStore(ui.activity).freeCancellationsRemaining())
+        }
+    }
+
+    @Test fun simultaneousCompletionAndCancellationCannotDoubleCreditOrCharge(){
+        ui.runOnUiThread{
+            val context=ui.activity
+            val store=FocusStore(context)
+            val prefs=context.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE)
+            store.configure(60);store.start()
+            prefs.edit().putLong("end_elapsed",SystemClock.elapsedRealtime()-100)
+                .putLong("end_wall",System.currentTimeMillis()-100).commit()
+            val threads=(1..8).map{Thread{FocusStore(context).completeIfDue()}}
+            threads.forEach{it.start()};threads.forEach{it.join()}
+            assertEquals(1L,store.rewardBalance());assertEquals(1,store.logs().size)
+            prefs.edit().putInt("free_cancellations_used",3).commit()
+            store.configure(60);store.start();store.pause()
+            val cancellations=(1..8).map{Thread{FocusStore(context).abandon()}}
+            cancellations.forEach{it.start()};cancellations.forEach{it.join()}
+            assertEquals(0L,store.rewardBalance());assertEquals(1,store.logs().size)
+            assertTrue(store.state().sessionId.isEmpty())
+        }
+    }
+
+    @Test fun lockedNotificationsRestoreForSilentFocusAndBreakAndUnlockImmediately(){
+        val manager=ui.activity.getSystemService(android.app.NotificationManager::class.java)
+        fun notice()=manager.activeNotifications.firstOrNull{it.id==1002}?.notification
+        for(mode in listOf("focus","break")){
+            ui.runOnUiThread{
+                val store=FocusStore(ui.activity)
+                store.setLockTimerNotification(true);store.configure(60,mode=mode);store.start()
+            }
+            ui.waitUntil(5_000){notice()?.flags?.and(android.app.Notification.FLAG_FOREGROUND_SERVICE)!=0 && notice()!=null}
+            assertTrue(notice()!!.flags and android.app.Notification.FLAG_ONGOING_EVENT != 0)
+            assertTrue(notice()!!.extras.getBoolean(android.app.Notification.EXTRA_CHRONOMETER_COUNT_DOWN))
+            // Simulate Android delivering the swipe's delete intent, then clearing the alert.
+            ui.runOnUiThread{notice()!!.deleteIntent.send();manager.cancel(1002)}
+            ui.waitUntil(5_000){notice()!=null}
+            ui.runOnUiThread{FocusStore(ui.activity).setLockTimerNotification(false)}
+            ui.waitUntil(5_000){notice()!=null && notice()!!.flags and android.app.Notification.FLAG_FOREGROUND_SERVICE == 0}
+            assertEquals(0,notice()!!.flags and android.app.Notification.FLAG_ONGOING_EVENT)
+            assertNull(notice()!!.deleteIntent)
+            ui.runOnUiThread{manager.cancel(1002)}
+            Thread.sleep(1_200)
+            assertNull(notice())
+            ui.runOnUiThread{FocusStore(ui.activity).pause()}
+            ui.waitUntil(5_000){notice()==null}
+            ui.runOnUiThread{FocusStore(ui.activity).abandon()}
+        }
     }
 
 }
