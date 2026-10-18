@@ -57,7 +57,6 @@ class SoundService:Service(){
             if(id==0){stopSelf();return START_NOT_STICKY}
             player=MediaPlayer.create(this,id)?.apply{
                 isLooping=true
-                setAudioAttributes(AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).setUsage(AudioAttributes.USAGE_MEDIA).build())
                 applyVolumeTo(this)
                 start()
             }
