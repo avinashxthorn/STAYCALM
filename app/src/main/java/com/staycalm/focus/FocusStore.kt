@@ -53,6 +53,12 @@ class FocusStore(private val context: Context) {
     fun completedMinutes():Int=logs().sumOf{it.minutes}
     fun dailyGoal():Int=prefs.getInt("daily_goal",120)
     fun setDailyGoal(value:Int){prefs.edit().putInt("daily_goal",value.coerceIn(30,360)).apply()}
+    fun lockTimerNotification():Boolean=prefs.getBoolean("lock_timer_notification",true)
+    fun setLockTimerNotification(value:Boolean){
+        prefs.edit().putBoolean("lock_timer_notification",value).apply()
+        val s=state()
+        if(s.running) Notice.sessionStarted(context,s.endWall,s.mode)
+    }
     fun enableDnd():Boolean=prefs.getBoolean("focus_dnd",false)
     fun setDnd(value:Boolean){prefs.edit().putBoolean("focus_dnd",value).apply()}
     fun soundVolume():Float=prefs.getFloat("volume",.66f)
@@ -169,7 +175,7 @@ object Notice {
             .setContentTitle(if(mode=="focus")"STAYCALM · In focus" else "STAYCALM · On a break")
             .setContentText("Your session is in progress")
             .setWhen(finishAt).setUsesChronometer(true).setChronometerCountDown(true)
-            .setOngoing(true).setOnlyAlertOnce(true).setContentIntent(pending)
+            .setOngoing(FocusStore(context).lockTimerNotification()).setOnlyAlertOnce(true).setContentIntent(pending)
             .addAction(Notification.Action.Builder(android.R.drawable.ic_media_pause,"Pause",
                 PendingIntent.getBroadcast(context,1003,Intent(context,AlarmReceiver::class.java).setAction("pause"),PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)).build()).build()
         try{context.getSystemService(NotificationManager::class.java).notify(1002,notification)}catch (_:SecurityException){}
@@ -225,7 +231,10 @@ class BootReceiver:BroadcastReceiver(){
         val store=FocusStore(context)
         store.completeIfDue()
         val state=store.state()
-        if(state.running)FocusAlarms.scheduleFocus(context,store.remaining(state))
+        if(state.running){
+            FocusAlarms.scheduleFocus(context,store.remaining(state))
+            Notice.sessionStarted(context,state.endWall,state.mode)
+        }
         store.tasks().filter{it.remind&&!it.done}.forEach{FocusAlarms.scheduleTask(context,it)}
         MotivationAlarms.schedule(context)
     }

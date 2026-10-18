@@ -59,7 +59,7 @@ private val StaycalmDarkColors=darkColorScheme(primary=Color(0xFFD66A9D),onPrima
 
 class MainActivity:ComponentActivity(){
     private lateinit var store:FocusStore
-    override fun onCreate(savedInstanceState:android.os.Bundle?){super.onCreate(savedInstanceState);store=FocusStore(this);Notice.channels(this)
+    override fun onCreate(savedInstanceState:android.os.Bundle?){super.onCreate(savedInstanceState);store=FocusStore(this);Notice.channels(this);LauncherIconSwitcher.apply(this,Personalization(this).darkMode())
         setContent {
             val personalization=remember{Personalization(this@MainActivity)}
             val journal=remember{StudyJournal(this@MainActivity)}
@@ -125,6 +125,7 @@ class MainActivity:ComponentActivity(){
             var completion by remember{mutableStateOf(store.completion())}
             var mode by remember{mutableStateOf(store.state().mode)}
             var dnd by remember{mutableStateOf(store.enableDnd())}
+            var lockedTimerNotification by remember{mutableStateOf(store.lockTimerNotification())}
             var goal by remember{mutableFloatStateOf(store.dailyGoal().toFloat())}
             var volume by remember{mutableFloatStateOf(store.soundVolume())}
             var duration by remember{mutableIntStateOf(store.state().durationMinutes)}
@@ -332,7 +333,7 @@ class MainActivity:ComponentActivity(){
                                                     Text("Dark pink mode",fontWeight=FontWeight.SemiBold)
                                                     Text("A softer screen for evening study.",fontSize=12.sp,color=Sub)
                                                 }
-                                                Switch(checked=isDark,onCheckedChange={isDark=it;personalization.setDarkMode(it)})
+                                                Switch(checked=isDark,onCheckedChange={isDark=it;personalization.setDarkMode(it);LauncherIconSwitcher.apply(this@MainActivity,it)})
                                             }
                                             HorizontalDivider()
                                             Text("Study encouragement",fontWeight=FontWeight.SemiBold)
@@ -368,6 +369,22 @@ class MainActivity:ComponentActivity(){
                                             }
                                             Text("Requires system permission. Android may allow priority calls, alarms and user-defined exceptions.",fontSize=11.sp,color=Sub)
                                             TextButton(onClick={startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))}){Text("Manage interruption access")}
+                                            HorizontalDivider(color=Border)
+                                            Spacer(Modifier.height(12.dp))
+                                            Row(verticalAlignment=Alignment.CenterVertically){
+                                                Column(Modifier.weight(1f)){
+                                                    Text("Lock timer notification",fontWeight=FontWeight.Bold)
+                                                    Text("Keep your focus or break countdown notification ongoing until the timer stops.",fontSize=12.sp,color=Sub)
+                                                }
+                                                Switch(checked=lockedTimerNotification,onCheckedChange={
+                                                    lockedTimerNotification=it
+                                                    store.setLockTimerNotification(it)
+                                                    if(it && Build.VERSION.SDK_INT>=33 &&
+                                                        checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
+                                                        permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                                })
+                                            }
+                                            Text("Android notification settings can still override visibility; some launchers and system versions allow dismissing ongoing alerts.",fontSize=11.sp,color=Sub)
                                             if(Build.VERSION.SDK_INT>=31){
                                                 Spacer(Modifier.height(8.dp))
                                                 HorizontalDivider(color=Border)
@@ -394,7 +411,7 @@ class MainActivity:ComponentActivity(){
                                     Surface(shape=RoundedCornerShape(22.dp),color=MaterialTheme.colorScheme.surface){
                                         Column(Modifier.padding(19.dp)){Text("Private by design",fontWeight=FontWeight.Bold,fontSize=17.sp);Spacer(Modifier.height(7.dp));Text("Your plans, focus history and turtle live on this device. No accounts, cloud backup, analytics trackers or AI.",color=Sub,fontSize=13.sp)}
                                     }
-                                    Text("STAYCALM · BLOOM EDITION 3.3",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
+                                    Text("STAYCALM · BLOOM EDITION 3.4",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
                                 }
                             }
                             Spacer(Modifier.height(24.dp))

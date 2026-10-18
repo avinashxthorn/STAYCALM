@@ -12,14 +12,28 @@
       android:usesCleartextTraffic="false"
       android:supportsRtl="true"
       android:theme="@style/Theme.Staycalm"
-      android:icon="@mipmap/ic_launcher"
-      android:roundIcon="@mipmap/ic_launcher">
-    <activity android:name=".MainActivity" android:exported="true">
+      android:icon="@mipmap/ic_launcher_light"
+      android:roundIcon="@mipmap/ic_launcher_light">
+    <activity android:name=".MainActivity" android:exported="false"/>
+    <!-- Exactly one launcher alias is enabled at a time; selected by the in-app theme. -->
+    <activity-alias android:name=".LightLauncher" android:enabled="true"
+        android:exported="true" android:targetActivity=".MainActivity"
+        android:label="STAYCALM" android:icon="@mipmap/ic_launcher_light"
+        android:roundIcon="@mipmap/ic_launcher_light">
       <intent-filter>
         <action android:name="android.intent.action.MAIN"/>
         <category android:name="android.intent.category.LAUNCHER"/>
       </intent-filter>
-    </activity>
+    </activity-alias>
+    <activity-alias android:name=".DarkLauncher" android:enabled="false"
+        android:exported="true" android:targetActivity=".MainActivity"
+        android:label="STAYCALM" android:icon="@mipmap/ic_launcher_dark"
+        android:roundIcon="@mipmap/ic_launcher_dark">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity-alias>
     <provider
       android:name="androidx.core.content.FileProvider"
       android:authorities="${applicationId}.fileprovider"
