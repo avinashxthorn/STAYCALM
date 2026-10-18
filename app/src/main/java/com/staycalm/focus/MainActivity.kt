@@ -181,7 +181,15 @@ class MainActivity:ComponentActivity(){
                 }){pad->
                     Column(Modifier.fillMaxSize().padding(pad)){
                         Row(Modifier.fillMaxWidth().padding(start=23.dp,end=23.dp,top=23.dp,bottom=9.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween){
-                            Column{Text("staycalm.",fontWeight=FontWeight.ExtraBold,letterSpacing=(-1).sp,fontSize=25.sp,color=Rose);Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, d MMMM")),fontSize=11.sp,color=Sub)}
+                            Column(Modifier.weight(1f)){
+                                Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){
+                                    Text("staycalm.",fontWeight=FontWeight.ExtraBold,letterSpacing=(-1).sp,fontSize=25.sp,color=Rose)
+                                    if(page==0)Surface(onClick={page=2},shape=CircleShape,color=Blush){
+                                        Text("★ $rewardBalance pts",modifier=Modifier.padding(horizontal=10.dp,vertical=7.dp),fontWeight=FontWeight.Bold,fontSize=12.sp,color=Rose)
+                                    }
+                                }
+                                Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, d MMMM")),fontSize=11.sp,color=Sub)
+                            }
                             Surface(onClick={page=3},shape=CircleShape,color=Blush){Icon(Icons.Rounded.Tune,"Open settings",tint=Rose,modifier=Modifier.padding(12.dp).size(20.dp))}
                         }
                         Crossfade(targetState=page,animationSpec=tween(220),label="page transition"){displayedPage->
