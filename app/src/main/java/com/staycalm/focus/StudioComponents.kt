@@ -78,7 +78,7 @@ fun StudioFocus(
                     Column(horizontalAlignment=Alignment.CenterHorizontally){
                         Icon(if(mode=="focus")Icons.Rounded.LocalFlorist else Icons.Rounded.Coffee,null,tint=roseInk,modifier=Modifier.size(24.dp))
                         Spacer(Modifier.height(8.dp))
-                        Text(FocusClock.displayTime(remainingMs),fontSize=49.sp,fontWeight=FontWeight.SemiBold,letterSpacing=(-2).sp,color=plumInk,style=TextStyle(fontFeatureSettings="tnum"))
+                        Text(FocusClock.displayTime(remainingMs),fontSize=49.sp,fontWeight=FontWeight.SemiBold,letterSpacing=(-2).sp,color=plumInk,style=LocalTextStyle.current.copy(fontFeatureSettings="tnum"))
                         Text(if(running)"YOU’RE DOING BEAUTIFULLY" else if(active)"PAUSED • TAKE YOUR TIME" else "ONE MOMENT AT A TIME",fontSize=9.sp,fontWeight=FontWeight.Bold,letterSpacing=1.sp,color=mutedInk)
                     }
                 }

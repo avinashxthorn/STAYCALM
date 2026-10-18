@@ -28,7 +28,13 @@ class AppFlowTest {
         ui.waitForIdle()
         val bitmap=ui.onRoot().captureToImage().asAndroidBitmap()
         val folder=File(ui.activity.getExternalFilesDir(null),"screenshots").apply{mkdirs()}
-        File(folder,"$name.png").outputStream().use{bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}
+        val file=File(folder,"$name.png")
+        file.outputStream().use{bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}
+        // Gradle uninstalls the app at the end, so preserve captures before app-data cleanup.
+        val command="mkdir -p /data/local/tmp/staycalm-screenshots && cp ${file.absolutePath} /data/local/tmp/staycalm-screenshots/$name.png && echo SAVED"
+        val descriptor=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command)
+        val result=android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).use{String(it.readBytes())}
+        assertTrue("Screenshot must survive test cleanup: $result",result.contains("SAVED"))
     }
     @Test fun pinkScreensAndPlannerFlow(){
         ui.onNodeWithText("Let your focus bloom.").assertIsDisplayed()

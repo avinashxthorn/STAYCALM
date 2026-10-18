@@ -3,5 +3,5 @@
 set +e
 gradle --no-daemon :app:connectedDebugAndroidTest --console=plain
 result=$?
-adb pull /sdcard/Android/data/com.staycalm.focus/files/screenshots ui-screenshots
+adb pull /data/local/tmp/staycalm-screenshots ui-screenshots
 exit "$result"
