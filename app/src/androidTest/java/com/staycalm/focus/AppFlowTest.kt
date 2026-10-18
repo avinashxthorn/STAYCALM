@@ -22,7 +22,10 @@ class AppFlowTest {
             ui.activity.stopService(android.content.Intent(ui.activity,SoundService::class.java))
             ui.activity.stopService(android.content.Intent(ui.activity,TimerService::class.java))
             Notice.sessionStopped(ui.activity)
-            ui.activity.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE).edit().clear().commit()
+            // UI tests run without the user-granted Usage Access / overlay permissions.
+            // Opt out in the fixture; blocker permission gating is tested separately.
+            ui.activity.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE).edit()
+                .clear().putBoolean("block_distracting_apps",false).commit()
             SessionUninstallGuard.releaseIfIdle(ui.activity)
             Personalization(ui.activity).saveProfile("Test Student","Veterinary medicine")
         }
