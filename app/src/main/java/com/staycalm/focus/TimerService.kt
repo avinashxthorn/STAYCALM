@@ -46,28 +46,42 @@ class TimerService : Service() {
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
         val store = FocusStore(this)
-        stopForeground(if (store.state().running && !store.lockTimerNotification())
-            STOP_FOREGROUND_DETACH else STOP_FOREGROUND_REMOVE)
+        val state = store.state()
+        val unlocked = state.running && !store.lockTimerNotification()
+        stopForeground(if (unlocked) STOP_FOREGROUND_DETACH else STOP_FOREGROUND_REMOVE)
+        // Rebuild after detaching so no system-added foreground/ongoing flag survives unlocking.
+        if (unlocked) Notice.sessionStarted(this, state.endWall, state.mode)
         super.onDestroy()
     }
 
     companion object {
+        private val mainHandler = Handler(Looper.getMainLooper())
+        private val startQueued = java.util.concurrent.atomic.AtomicBoolean(false)
+
         fun ensureRunning(context: Context) {
-            val store = FocusStore(context)
-            val state = store.state()
-            if (!state.running) return
-            if (!store.lockTimerNotification()) {
-                context.stopService(Intent(context, TimerService::class.java))
-                Notice.sessionStarted(context, state.endWall, state.mode)
-                return
-            }
-            try {
-                context.startForegroundService(Intent(context, TimerService::class.java))
-            } catch (_: IllegalStateException) {
-                // The OS may forbid a background start; keep the persisted timer + alarm.
-                Notice.sessionStarted(context, state.endWall, state.mode)
-            } catch (_: SecurityException) {
-                Notice.sessionStarted(context, state.endWall, state.mode)
+            // Request startup only when the main looper can actually create the service.
+            // Coalesce rapid start/pause/resume operations and re-read the persisted state
+            // rather than launching a foreground service for an already-stopped session.
+            if (!startQueued.compareAndSet(false, true)) return
+            val app = context.applicationContext
+            mainHandler.post {
+                startQueued.set(false)
+                val store = FocusStore(app)
+                val state = store.state()
+                if (!state.running) return@post
+                if (!store.lockTimerNotification()) {
+                    app.stopService(Intent(app, TimerService::class.java))
+                    Notice.sessionStarted(app, state.endWall, state.mode)
+                    return@post
+                }
+                try {
+                    app.startForegroundService(Intent(app, TimerService::class.java))
+                } catch (_: IllegalStateException) {
+                    // The OS may forbid a background start; keep the persisted timer + alarm.
+                    Notice.sessionStarted(app, state.endWall, state.mode)
+                } catch (_: SecurityException) {
+                    Notice.sessionStarted(app, state.endWall, state.mode)
+                }
             }
         }
     }
