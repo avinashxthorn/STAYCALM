@@ -441,7 +441,7 @@ class MainActivity:ComponentActivity(){
                                             Row(verticalAlignment=Alignment.CenterVertically){
                                                 Column(Modifier.weight(1f)){
                                                     Text("Block distracting apps",fontWeight=FontWeight.Bold)
-                                                    Text("Block Instagram, Instagram Lite and YouTube during unfinished focus sessions, including pauses. They work normally when your session ends.",fontSize=12.sp,color=Sub)
+                                                    Text("Cover Instagram, Instagram Lite and YouTube during unfinished focus sessions, including pauses. These apps work normally after your session ends.",fontSize=12.sp,color=Sub)
                                                 }
                                                 Switch(checked=blockApps,onCheckedChange={
                                                     blockApps=it;store.setBlockDistractingApps(it)
@@ -451,12 +451,12 @@ class MainActivity:ComponentActivity(){
                                             }
                                             if(blockApps){
                                                 Text(if(FocusAppBlocker.isEnabled(this@MainActivity))
-                                                    "Android Accessibility access is enabled · blocking active for focus sessions."
-                                                    else "Setup required: enable STAYCALM app blocker in Android Accessibility settings before starting focus.",
+                                                    "Usage access and Display over other apps granted · focus blocking ready."
+                                                    else "Setup required: allow Usage access and Display over other apps before starting focus.",
                                                     color=if(FocusAppBlocker.isEnabled(this@MainActivity))Sub else Rose,fontSize=11.sp)
                                                 TextButton(onClick={blockerSetup=true}){Text("Set up app blocking")}
                                             }
-                                            Text("Only the three app identities are checked. No screen text is read or collected. Android Settings can disable this service at any time.",fontSize=11.sp,color=Sub)
+                                            Text("This optional feature checks which app is in front and covers only Instagram, Instagram Lite and YouTube while focus is unfinished. No screen text is read or uploaded. Android Settings can revoke both permissions.",fontSize=11.sp,color=Sub)
                                             HorizontalDivider(color=Border)
                                             Spacer(Modifier.height(12.dp))
                                             Row(verticalAlignment=Alignment.CenterVertically){
@@ -553,9 +553,22 @@ class MainActivity:ComponentActivity(){
                 }){Text("End session")}},dismissButton={TextButton(onClick={showReset=false}){Text("Keep going")}})
             }
             if(blockerSetup)AlertDialog(onDismissRequest={blockerSetup=false},
-                title={Text("Allow focus app blocking")},
-                text={Text("STAYCALM uses Android Accessibility only to detect when Instagram, Instagram Lite or YouTube opens. During an unfinished focus session it returns you to Home. It does not inspect screen text or upload activity. The service is optional and can be disabled in Android Settings. Open Accessibility settings, select STAYCALM app blocker and enable it, then return to start focusing.")},
-                confirmButton={TextButton(onClick={blockerSetup=false;startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))}){Text("Open Accessibility settings")}},
+                title={Text("Set up focus app blocking")},
+                text={
+                    Column(verticalArrangement=Arrangement.spacedBy(10.dp)){
+                        Text("STAYCALM needs two optional Android permissions to detect foreground apps and cover Instagram, Instagram Lite and YouTube during unfinished focus sessions. App usage is processed only on this phone. STAYCALM never reads screen text or uploads it.",fontSize=13.sp)
+                        Text(if(FocusAppBlocker.hasUsageAccess(this@MainActivity))
+                            "✓ Usage access allowed" else "1. Grant Usage access",fontWeight=FontWeight.SemiBold)
+                        if(!FocusAppBlocker.hasUsageAccess(this@MainActivity))
+                            TextButton(onClick={startActivity(FocusAppBlocker.usageAccessIntent())}){Text("Open Usage access settings")}
+                        Text(if(FocusAppBlocker.hasOverlayAccess(this@MainActivity))
+                            "✓ Display over other apps allowed" else "2. Allow Display over other apps",fontWeight=FontWeight.SemiBold)
+                        if(!FocusAppBlocker.hasOverlayAccess(this@MainActivity))
+                            TextButton(onClick={startActivity(FocusAppBlocker.overlayAccessIntent(this@MainActivity))}){Text("Open Display over other apps settings")}
+                        Text("After allowing both permissions, return to STAYCALM and start your session. You can revoke either permission in Android Settings.",fontSize=12.sp,color=Sub)
+                    }
+                },
+                confirmButton={TextButton(onClick={blockerSetup=false;revision++}){Text("Done")}},
                 dismissButton={TextButton(onClick={blockerSetup=false}){Text("Not now")}})
             if(protectionError!=null)AlertDialog(onDismissRequest={protectionError=null},title={Text("Session protection")},text={Text(protectionError.orEmpty())},confirmButton={TextButton(onClick={protectionError=null}){Text("OK")}})
             if(cancellationError!=null)AlertDialog(onDismissRequest={cancellationError=null},title={Text("Session kept")},text={Text(cancellationError.orEmpty())},confirmButton={TextButton(onClick={cancellationError=null}){Text("OK")}})

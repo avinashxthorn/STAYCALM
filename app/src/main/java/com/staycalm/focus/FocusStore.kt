@@ -63,7 +63,11 @@ class FocusStore(private val context: Context) {
         saved
     }
     fun blockDistractingApps():Boolean=prefs.getBoolean("block_distracting_apps",true)
-    fun setBlockDistractingApps(value:Boolean){prefs.edit().putBoolean("block_distracting_apps",value).apply()}
+    fun setBlockDistractingApps(value:Boolean){
+        prefs.edit().putBoolean("block_distracting_apps",value).apply()
+        TimerService.ensureRunning(context)
+        if(!value)TimerService.stop(context)
+    }
     fun lockTimerNotification():Boolean=prefs.getBoolean("lock_timer_notification",true)
     fun setLockTimerNotification(value:Boolean){
         prefs.edit().putBoolean("lock_timer_notification",value).apply()
@@ -128,6 +132,7 @@ class FocusStore(private val context: Context) {
         if(left<=0){completeIfDue();return}
         if(!save(s.copy(running=false,remainingMs=left.coerceAtMost(s.durationMinutes*60_000L-1),endElapsed=0L,endWall=0L)))return
         FocusAlarms.cancelFocus(context);Notice.sessionStopped(context);FocusDnd.exit(context)
+        if(FocusAppBlocker.keepAlive(context,state()))TimerService.ensureRunning(context)
     } }
     fun abandon():CancellationResult = synchronized(timerLock) {
         val s=state()
@@ -224,17 +229,19 @@ object Notice {
         val locked=FocusStore(context).lockTimerNotification()
         val pending=PendingIntent.getActivity(context,1002,Intent(context,MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val state=FocusStore(context).state()
+        val blockerActive=FocusAppBlocker.keepAlive(context,state)
         val builder=Notification.Builder(context,ACTIVE)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle(if(mode=="focus")"STAYCALM · In focus" else "STAYCALM · On a break")
-            .setContentText(if(locked) "Timer notification locked · tap to open" else "Your session is in progress")
-            .setWhen(finishAt).setUsesChronometer(true).setChronometerCountDown(true)
-            .setOngoing(locked).setAutoCancel(false).setOnlyAlertOnce(true).setContentIntent(pending)
+            .setContentTitle(if(!state.running) "STAYCALM · Focus paused" else if(mode=="focus")"STAYCALM · In focus" else "STAYCALM · On a break")
+            .setContentText(if(!state.running && blockerActive) "Instagram and YouTube remain blocked · tap to open" else if(locked) "Timer notification locked · tap to open" else "Your session is in progress")
+            .setOngoing(locked || blockerActive).setAutoCancel(false).setOnlyAlertOnce(true).setContentIntent(pending)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
-        if(locked)builder.setDeleteIntent(PendingIntent.getBroadcast(context,1004,
+        if(state.running)builder.setWhen(finishAt).setUsesChronometer(true).setChronometerCountDown(true)
+        if(locked || blockerActive)builder.setDeleteIntent(PendingIntent.getBroadcast(context,1004,
             Intent(context,AlarmReceiver::class.java).setAction("timer_notification_dismissed"),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
-        builder.addAction(Notification.Action.Builder(android.R.drawable.ic_media_pause,"Pause",
+        if(state.running)builder.addAction(Notification.Action.Builder(android.R.drawable.ic_media_pause,"Pause",
             PendingIntent.getBroadcast(context,1003,Intent(context,AlarmReceiver::class.java).setAction("pause"),PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)).build())
         return builder.build()
     }

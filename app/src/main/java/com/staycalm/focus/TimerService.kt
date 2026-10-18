@@ -7,20 +7,32 @@ import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 
-/** Keeps the locked countdown alive even when no music is playing or Activity is open. */
+/**
+ * Persistent foreground countdown and, when explicitly enabled, the focus app overlay.
+ * Overlay monitoring runs only for an unfinished focus session.
+ */
 class TimerService : Service() {
     private val handler = Handler(Looper.getMainLooper())
+    private lateinit var watcher: FocusAppWatcher
+
     private val pulse = object : Runnable {
         override fun run() {
             val store = FocusStore(this@TimerService)
-            if (store.completeIfDue() || !store.state().running || (!store.lockTimerNotification() && !SessionUninstallGuard.keepTimerAlive(this@TimerService))) {
+            if (store.completeIfDue()) {
+                watcher.hide()
                 stopSelf()
                 return
             }
-            // Android 14+ allows swiping an ongoing alert while unlocked. Restore it,
-            // including on devices which do not deliver its delete PendingIntent.
-            if (store.lockTimerNotification() && getSystemService(NotificationManager::class.java).activeNotifications.none { it.id == 1002 }) {
-                val state = store.state()
+            val state = store.state()
+            if (!shouldStayRunning(store, state)) {
+                watcher.hide()
+                stopSelf()
+                return
+            }
+            watcher.tick(state, store.blockDistractingApps())
+            val notificationIsMissing = getSystemService(NotificationManager::class.java)
+                .activeNotifications.none { it.id == 1002 }
+            if (notificationIsMissing && (store.lockTimerNotification() || FocusAppBlocker.keepAlive(this@TimerService, state))) {
                 Notice.sessionStarted(this@TimerService, state.endWall, state.mode)
             }
             handler.postDelayed(this, 1_000L)
@@ -31,6 +43,7 @@ class TimerService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        watcher = FocusAppWatcher(this)
         val state = FocusStore(this).state()
         startForeground(1002, Notice.sessionNotification(this, state.endWall, state.mode))
         activeService = this
@@ -39,10 +52,9 @@ class TimerService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val store = FocusStore(this)
         val state = store.state()
-        // Meet the startForegroundService deadline even if pause/completion raced startup.
         startForeground(1002, Notice.sessionNotification(this, state.endWall, state.mode))
         handler.removeCallbacks(pulse)
-        if (!state.running || (!store.lockTimerNotification() && !SessionUninstallGuard.keepTimerAlive(this@TimerService)) || store.completeIfDue()) {
+        if (store.completeIfDue() || !shouldStayRunning(store, store.state())) {
             stopSelf()
             return START_NOT_STICKY
         }
@@ -52,15 +64,20 @@ class TimerService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
+        watcher.hide()
         if (activeService === this) activeService = null
         val store = FocusStore(this)
         val state = store.state()
-        val unlocked = state.running && !store.lockTimerNotification()
+        val unlocked = state.running && !store.lockTimerNotification() &&
+            !SessionUninstallGuard.keepTimerAlive(this) && !FocusAppBlocker.keepAlive(this, state)
         stopForeground(if (unlocked) STOP_FOREGROUND_DETACH else STOP_FOREGROUND_REMOVE)
-        // Rebuild after detaching so no system-added foreground/ongoing flag survives unlocking.
         if (unlocked) Notice.sessionStarted(this, state.endWall, state.mode)
         super.onDestroy()
     }
+
+    private fun shouldStayRunning(store: FocusStore, state: FocusState): Boolean =
+        FocusAppBlocker.keepAlive(this, state) ||
+            (state.running && (store.lockTimerNotification() || SessionUninstallGuard.keepTimerAlive(this)))
 
     companion object {
         private val mainHandler = Handler(Looper.getMainLooper())
@@ -71,37 +88,33 @@ class TimerService : Service() {
             val app = context.applicationContext
             mainHandler.post {
                 val store = FocusStore(app)
-                if (!store.state().running || (!store.lockTimerNotification() && !SessionUninstallGuard.keepTimerAlive(app))) {
-                    // A pending startup must first enter the foreground, then stop itself.
-                    // Stopping it before onCreate can otherwise leave Android's timeout armed.
-                    activeService?.stopSelf()
-                }
+                val state = store.state()
+                val shouldRun = FocusAppBlocker.keepAlive(app, state) ||
+                    (state.running && (store.lockTimerNotification() || SessionUninstallGuard.keepTimerAlive(app)))
+                if (!shouldRun) activeService?.stopSelf()
             }
         }
 
         fun ensureRunning(context: Context) {
-            // Request startup only when the main looper can actually create the service.
-            // Coalesce rapid start/pause/resume operations and re-read the persisted state
-            // rather than launching a foreground service for an already-stopped session.
             if (!startQueued.compareAndSet(false, true)) return
             val app = context.applicationContext
             mainHandler.post {
                 startQueued.set(false)
                 val store = FocusStore(app)
                 val state = store.state()
-                if (!state.running) return@post
-                if (!store.lockTimerNotification() && !SessionUninstallGuard.keepTimerAlive(app)) {
+                val shouldRun = FocusAppBlocker.keepAlive(app, state) ||
+                    (state.running && (store.lockTimerNotification() || SessionUninstallGuard.keepTimerAlive(app)))
+                if (!shouldRun) {
                     stop(app)
-                    Notice.sessionStarted(app, state.endWall, state.mode)
+                    if (state.running) Notice.sessionStarted(app, state.endWall, state.mode)
                     return@post
                 }
                 try {
                     app.startForegroundService(Intent(app, TimerService::class.java))
                 } catch (_: IllegalStateException) {
-                    // The OS may forbid a background start; keep the persisted timer + alarm.
-                    Notice.sessionStarted(app, state.endWall, state.mode)
+                    if (state.running) Notice.sessionStarted(app, state.endWall, state.mode)
                 } catch (_: SecurityException) {
-                    Notice.sessionStarted(app, state.endWall, state.mode)
+                    if (state.running) Notice.sessionStarted(app, state.endWall, state.mode)
                 }
             }
         }
