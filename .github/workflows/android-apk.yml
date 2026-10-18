@@ -1,29 +1,35 @@
-name: Build Android APK
+name: STAYCALM · Android APK
 on:
   push:
     branches: [main]
   workflow_dispatch:
 jobs:
-  apk:
+  android:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - name: Set up Android SDK (Node 24 compatible)
-        uses: android-actions/setup-android@v4
+      - uses: android-actions/setup-android@v4
         with:
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-      - name: Build debug APK
-        run: gradle --no-daemon assembleDebug
+      - name: Download offline font and CC0 sound assets
+        run: bash scripts/fetch-assets.sh
+      - name: Verify local unit tests
+        run: gradle --no-daemon :app:testDebugUnitTest
+      - name: Assemble debug APK
+        run: gradle --no-daemon :app:assembleDebug
       - uses: actions/upload-artifact@v4
+        if: success()
         with:
-          name: STAYCALM-debug-apk
+          name: STAYCALM-v2-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30

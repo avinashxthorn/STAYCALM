@@ -4,325 +4,401 @@ import android.Manifest
 import android.app.*
 import android.content.*
 import android.content.pm.PackageManager
-import android.media.*
-import android.os.*
+import android.os.Build
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.*
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.*
+import androidx.compose.ui.graphics.vector.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
 import kotlinx.coroutines.delay
+import java.time.*
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import kotlin.math.*
-import java.util.Calendar
-import kotlin.random.Random
 
-private val rose=Color(0xFFD56888)
-private val ink=Color(0xFF29212A)
-private val paper=Color(0xFFFCF7F8)
-private val muted=Color(0xFF897A85)
-private val pale=Color(0xFFF6E8ED)
-private val moss=Color(0xFF5A8976)
-private val shell=Color(0xFF3E675E)
-private val background=Color(0xFFF9F4F5)
-private val card=Color.White
-private const val PREF="staycalm_offline"
+private val Ink=Color(0xFF29212D)
+private val Rose=Color(0xFFC45E83)
+private val Blush=Color(0xFFF5E4E9)
+private val Fog=Color(0xFFF9F5F6)
+private val Sub=Color(0xFF897F88)
+private val Cream=Color(0xFFFFFCFB)
+private val Green=Color(0xFF447B65)
+private val DarkGreen=Color(0xFF305C50)
+private val Border=Color(0xFFEEE5E8)
+
+private val theme=lightColorScheme(primary=Rose,onPrimary=Color.White,background=Fog,onBackground=Ink,surface=Color.White,onSurface=Ink,secondary=Green)
 
 class MainActivity:ComponentActivity(){
-    private val prefs by lazy {getSharedPreferences(PREF,MODE_PRIVATE)}
-    private val notificationManager by lazy {getSystemService(NotificationManager::class.java)}
-    private fun enableDnd():Boolean{
-        if (!notificationManager.isNotificationPolicyAccessGranted) return false
-        if(!prefs.contains("prior_filter"))prefs.edit().putInt("prior_filter",notificationManager.currentInterruptionFilter).apply()
-        return try {notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY); true }catch (_:Exception){false}
-    }
-    private fun restoreDnd(){
-        if(!prefs.contains("prior_filter"))return
-        try {
-            if(notificationManager.isNotificationPolicyAccessGranted) notificationManager.setInterruptionFilter(prefs.getInt("prior_filter",NotificationManager.INTERRUPTION_FILTER_ALL))
-        }catch (_:Exception){} finally {prefs.edit().remove("prior_filter").apply()}
-    }
-    override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState)
+    private lateinit var store:FocusStore
+    override fun onCreate(savedInstanceState:android.os.Bundle?){super.onCreate(savedInstanceState);store=FocusStore(this);Notice.channels(this)
         setContent {
-            var tab by remember {mutableIntStateOf(0)}
-            var selected by remember {mutableIntStateOf(prefs.getInt("duration",25))}
-            var remaining by remember {mutableLongStateOf(prefs.getLong("remaining",selected*60L))}
-            var deadline by remember {mutableLongStateOf(prefs.getLong("deadline",0))}
-            var running by remember {mutableStateOf(prefs.getBoolean("running",false))}
-            var sessions by remember {mutableIntStateOf(prefs.getInt("sessions",0))}
-            var minutes by remember {mutableIntStateOf(prefs.getInt("minutes",0))}
-            var today by remember {mutableIntStateOf(prefs.getInt("today_minutes",0))}
-            var music by remember {mutableStateOf(prefs.getString("sound","Rain")?:"Rain")}
-            var playing by remember {mutableStateOf(false)}
-            var dnd by remember {mutableStateOf(prefs.getBoolean("enable_dnd",false))}
-            var dialog by remember {mutableStateOf(false)}
-            var tasks by remember {mutableStateOf(readTasks())}
-            var newTask by remember {mutableStateOf("")}
-            val requestNotifications=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){}
-            val sounds=listOf("Rain","Ocean","Forest","White Noise","Brown Noise","Night Breeze")
-            val soundsIcon=listOf("☔","≈","♣","◉","◌","☾")
-            val stage=when {minutes<25->0;minutes<60->1;minutes<120->2;minutes<240->3;minutes<480->4;else->5}
-            fun stopAudio(){stopService(Intent(this,SoundService::class.java));playing=false}
-            fun saveTimer(){
-                prefs.edit().putInt("duration",selected).putLong("remaining",remaining)
-                    .putLong("deadline",deadline).putBoolean("running",running).apply()
-            }
-            fun finishSession(){
-                running=false;deadline=0L;remaining=selected*60L
-                sessions++;minutes+=selected;today+=selected
-                prefs.edit().putInt("sessions",sessions).putInt("minutes",minutes).putInt("today_minutes",today).apply()
-                saveTimer();restoreDnd()
-                if(playing) stopAudio()
-            }
-            LaunchedEffect(Unit) {
-                val day=Calendar.getInstance().get(Calendar.YEAR)*1000+Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
-                if(prefs.getInt("day",0)!=day){today=0;prefs.edit().putInt("day",day).putInt("today_minutes",0).apply()}
-                if(android.os.Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED) requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-            LaunchedEffect(running,deadline){
-                while(running){
-                    val left=((deadline-System.currentTimeMillis()+999)/1000).coerceAtLeast(0)
-                    remaining=left
-                    if(left<=0){finishSession();break}
-                    delay(250)
-                }
-            }
-            MaterialTheme(colorScheme=lightColorScheme(primary=rose,onPrimary=Color.White,background=background,surface=card,onSurface=ink)){
-                Scaffold(containerColor=background,bottomBar={
-                    NavigationBar(containerColor=Color.White,tonalElevation=4.dp){
-                        listOf(Triple("Focus",Icons.Filled.Timer,0),Triple("Tasks",Icons.Filled.CheckCircle,1),Triple("Insights",Icons.Filled.Insights,2),Triple("Settings",Icons.Filled.Settings,3)).forEach{(name,ic,id)->
-                            NavigationBarItem(selected=tab==id,onClick={tab=id},icon={Icon(ic,name)},label={Text(name)},colors=NavigationBarItemDefaults.colors(selectedIconColor=rose,selectedTextColor=rose,indicatorColor=pale))
+            var page by remember{mutableIntStateOf(0)}
+            var tick by remember{mutableLongStateOf(0L)}
+            var revision by remember{mutableIntStateOf(0)}
+            var sound by remember{mutableStateOf(store.lastSound())}
+            var playing by remember{mutableStateOf(false)}
+            var openSound by remember{mutableStateOf(false)}
+            var editTask by remember{mutableStateOf<PlanItem?>(null)}
+            var adding by remember{mutableStateOf(false)}
+            var selectedDate by remember{mutableStateOf(LocalDate.now())}
+            var showReset by remember{mutableStateOf(false)}
+            var dnd by remember{mutableStateOf(store.enableDnd())}
+            var goal by remember{mutableFloatStateOf(store.dailyGoal().toFloat())}
+            var volume by remember{mutableFloatStateOf(store.soundVolume())}
+            var duration by remember{mutableIntStateOf(store.state().durationMinutes)}
+            val permission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){}
+            LaunchedEffect(Unit){if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)permission.launch(Manifest.permission.POST_NOTIFICATIONS)}
+            LaunchedEffect(Unit){while(true){tick=System.currentTimeMillis();if(store.completeIfDue())revision++;delay(300)}}
+            val current=remember(revision,tick){store.state()}
+            val left=store.remaining(current)
+            val logs=remember(revision){store.logs()}
+            val plans=remember(revision){store.tasks()}
+            val total=logs.sumOf{it.minutes}
+            val stage=Evolution.stage(total)
+            val today=logs.filter{Instant.ofEpochMilli(it.at).atZone(ZoneId.systemDefault()).toLocalDate()==LocalDate.now()}.sumOf{it.minutes}
+            val titleStyle=FontFamily(Font(com.staycalm.focus.R.font.manrope))
+            MaterialTheme(colorScheme=theme,typography=Typography(
+                displayLarge=TextStyle(fontFamily=titleStyle,fontWeight=FontWeight.Bold),
+                headlineLarge=TextStyle(fontFamily=titleStyle,fontWeight=FontWeight.Bold),
+                titleLarge=TextStyle(fontFamily=titleStyle,fontWeight=FontWeight.SemiBold),
+                bodyMedium=TextStyle(fontFamily=titleStyle),
+                labelLarge=TextStyle(fontFamily=titleStyle,fontWeight=FontWeight.SemiBold)
+            )){
+                Scaffold(containerColor=Fog,bottomBar={
+                    NavigationBar(containerColor=Cream,tonalElevation=0.dp){
+                        listOf(Triple("Focus",Icons.Rounded.Timer,0),Triple("Planner",Icons.Rounded.CalendarMonth,1),Triple("Insights",Icons.Rounded.BarChart,2),Triple("Settings",Icons.Rounded.Tune,3)).forEach{(name,icon,index)->
+                            NavigationBarItem(selected=page==index,onClick={page=index},icon={Icon(icon,name)},label={Text(name,fontSize=11.sp)},colors=NavigationBarItemDefaults.colors(selectedIconColor=Rose,selectedTextColor=Rose,indicatorColor=Blush))
                         }
                     }
-                }){inner->
-                    Column(Modifier.fillMaxSize().padding(inner).verticalScroll(rememberScrollState()).padding(horizontal=23.dp),verticalArrangement=Arrangement.spacedBy(19.dp)){
-                        Spacer(Modifier.height(10.dp))
-                        Row(verticalAlignment=Alignment.CenterVertically){
-                            Column(Modifier.weight(1f)){Text("STAYCALM",fontSize=25.sp,fontWeight=FontWeight.ExtraBold,letterSpacing=2.sp,color=ink);Text("MAKE ROOM FOR YOUR MIND",fontSize=10.sp,letterSpacing=2.sp,color=muted)}
-                            Box(Modifier.size(44.dp).background(pale, CircleShape),contentAlignment=Alignment.Center){Icon(Icons.Filled.Spa,null,tint=rose)}
+                }){pad->
+                    Column(Modifier.fillMaxSize().padding(pad)){
+                        Row(Modifier.fillMaxWidth().padding(start=23.dp,end=23.dp,top=23.dp,bottom=9.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween){
+                            Column{Text("STAYCALM",fontWeight=FontWeight.ExtraBold,letterSpacing=3.sp,fontSize=17.sp,color=Ink);Text("THE FOCUS STUDIO",fontSize=9.sp,letterSpacing=2.sp,color=Sub)}
+                            Surface(shape=CircleShape,color=Blush){Icon(Icons.Rounded.Spa,"Stay calm",tint=Rose,modifier=Modifier.padding(12.dp).size(20.dp))}
                         }
-                        when(tab){
-                            0->{
-                                Text("Find your flow.",fontSize=33.sp,fontWeight=FontWeight.Bold,color=ink,letterSpacing=(-1).sp)
-                                Text("Quiet progress. One session at a time.",color=muted,fontSize=14.sp)
-                                Surface(shape=RoundedCornerShape(27.dp),color=Color.White,shadowElevation=1.dp){
-                                    Column(Modifier.fillMaxWidth().padding(22.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(15.dp)){
-                                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("YOUR COMPANION",fontSize=11.sp,letterSpacing=1.5.sp,fontWeight=FontWeight.Bold,color=muted);Text(listOf("Egg","First cracks","Hatching","Hatchling","Young turtle","Adult turtle")[stage],color=rose,fontSize=12.sp,fontWeight=FontWeight.SemiBold)}
-                                        Turtle(stage,Modifier.fillMaxWidth().height(183.dp))
-                                        Text("GROW YOUR TURTLE",fontWeight=FontWeight.Bold,letterSpacing=1.3.sp,fontSize=13.sp,color=ink)
-                                        val next=listOf(25,60,120,240,480)
-                                        if(stage<5){val prev=if(stage==0)0 else next[stage-1]; val goal=next[stage]; LinearProgressIndicator(progress={((minutes-prev).toFloat()/(goal-prev)).coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),color=rose,trackColor=pale);Text("${goal-minutes} focus minutes until your next milestone",fontSize=11.sp,color=muted)}
-                                        else Text("Fully grown. Keep your momentum.",color=muted,fontSize=12.sp)
-                                    }
-                                }
-                                Surface(shape=RoundedCornerShape(27.dp),color=Color.White){
-                                    Column(Modifier.padding(23.dp),horizontalAlignment=Alignment.CenterHorizontally){
-                                        Text("DEEP FOCUS",fontSize=11.sp,fontWeight=FontWeight.Bold,color=muted,letterSpacing=2.sp)
-                                        Spacer(Modifier.height(13.dp))
-                                        Box(contentAlignment=Alignment.Center){
-                                            CircularProgressIndicator(progress={if(running)1f-(remaining.toFloat()/(selected*60f)) else 0f},modifier=Modifier.size(204.dp),strokeWidth=9.dp,color=rose,trackColor=pale,strokeCap=StrokeCap.Round)
-                                            Column(horizontalAlignment=Alignment.CenterHorizontally){Text("%02d:%02d".format(remaining/60,remaining%60),fontSize=52.sp,fontWeight=FontWeight.Light,color=ink);Text(if(running)"STAY PRESENT" else "READY WHEN YOU ARE",letterSpacing=1.5.sp,fontSize=10.sp,color=muted)}
-                                        }
-                                        Spacer(Modifier.height(18.dp))
-                                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){listOf(15,25,45,60).forEach{n->FilterChip(selected=selected==n,onClick={if(!running){selected=n;remaining=n*60L;saveTimer()}},label={Text("${n}m")},colors=FilterChipDefaults.filterChipColors(selectedContainerColor=pale,selectedLabelColor=rose))}}
-                                        Spacer(Modifier.height(10.dp))
-                                        Button(onClick={
-                                            if(running){remaining=((deadline-System.currentTimeMillis()+999)/1000).coerceAtLeast(0);running=false;deadline=0;saveTimer();restoreDnd()}
-                                            else {deadline=System.currentTimeMillis()+remaining*1000;running=true;saveTimer();if(dnd)enableDnd()}
-                                        },modifier=Modifier.fillMaxWidth().height(56.dp),shape=RoundedCornerShape(18.dp)){Icon(if(running)Icons.Filled.Pause else Icons.Filled.PlayArrow,null);Spacer(Modifier.width(10.dp));Text(if(running)"Pause session" else "Begin focus",fontWeight=FontWeight.Bold)}
-                                        if(running || remaining != selected*60L)TextButton(onClick={running=false;remaining=selected*60L;deadline=0;saveTimer();restoreDnd();if(playing)stopAudio()}){Text("End without saving",color=muted)}
-                                    }
-                                }
-                                Text("FOCUS SOUNDS",fontSize=13.sp,fontWeight=FontWeight.Bold,letterSpacing=1.3.sp)
-                                Surface(shape=RoundedCornerShape(22.dp),color=Color.White){
-                                    Column(Modifier.padding(13.dp)){
-                                        sounds.forEachIndexed{index,s->
-                                            Row(Modifier.fillMaxWidth().clickable{
-                                                music=s;prefs.edit().putString("sound",s).apply()
-                                                if(playing){startService(Intent(this@MainActivity,SoundService::class.java).putExtra("sound",s))}
-                                            }.padding(12.dp),verticalAlignment=Alignment.CenterVertically){
-                                                Box(Modifier.size(40.dp).background(pale,RoundedCornerShape(13.dp)),contentAlignment=Alignment.Center){Text(soundsIcon[index],fontSize=22.sp,color=rose)}
-                                                Spacer(Modifier.width(13.dp));Text(s,Modifier.weight(1f),fontWeight=if(music==s)FontWeight.Bold else FontWeight.Normal,color=ink)
-                                                if(music==s){IconButton(onClick={
-                                                    if(playing)stopAudio()
-                                                    else {if(android.os.Build.VERSION.SDK_INT<33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED){startForegroundService(Intent(this@MainActivity,SoundService::class.java).putExtra("sound",s));playing=true} else requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)}
-                                                }){Icon(if(playing)Icons.Filled.PauseCircle else Icons.Filled.PlayCircle,null,tint=rose)}}
-                                                else Icon(Icons.Filled.ChevronRight,null,tint=muted)
+                        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=22.dp),verticalArrangement=Arrangement.spacedBy(18.dp)){
+                            Spacer(Modifier.height(8.dp))
+                            when(page){
+                                0->{
+                                    Header("Your quiet space.","Make today count, gently.")
+                                    Surface(shape=RoundedCornerShape(27.dp),color=Color.White){
+                                        Column(Modifier.fillMaxWidth().padding(20.dp),horizontalAlignment=Alignment.CenterHorizontally){
+                                            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
+                                                SmallLabel("YOUR COMPANION")
+                                                Text("STAGE ${stage+1}/6",fontSize=11.sp,fontWeight=FontWeight.Bold,color=Rose,letterSpacing=1.sp)
                                             }
-                                            if(index<sounds.lastIndex)HorizontalDivider(color=background)
+                                            TurtleScene(stage,Modifier.fillMaxWidth().height(205.dp))
+                                            Text(Evolution.title(stage),fontWeight=FontWeight.Bold,fontSize=20.sp,color=Ink)
+                                            Spacer(Modifier.height(5.dp))
+                                            Text(if(stage==5)"A companion grown through focus." else "Every finished minute helps your turtle grow.",fontSize=12.sp,color=Sub,textAlign=TextAlign.Center)
+                                            Spacer(Modifier.height(15.dp))
+                                            val prev=listOf(0,30,90,180,360,720)[stage]
+                                            val next=Evolution.next(total)
+                                            LinearProgressIndicator(progress={if(next==null)1f else ((total-prev).toFloat()/(next-prev)).coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),color=Rose,trackColor=Blush)
+                                            Spacer(Modifier.height(7.dp))
+                                            Text(if(next==null)"Fully evolved · Keep going" else "${next-total} min to next chapter",color=Sub,fontSize=11.sp)
+                                        }
+                                    }
+                                    Surface(shape=RoundedCornerShape(27.dp),color=Color.White){
+                                        Column(Modifier.padding(22.dp),horizontalAlignment=Alignment.CenterHorizontally){
+                                            SmallLabel("FOCUS SESSION")
+                                            Spacer(Modifier.height(14.dp))
+                                            Box(contentAlignment=Alignment.Center){
+                                                CircularProgressIndicator(progress={if(current.running||left<current.durationMinutes*60_000L)1f-left/(current.durationMinutes*60_000f) else 0f},modifier=Modifier.size(207.dp),strokeWidth=8.dp,trackColor=Blush,color=Rose,strokeCap=StrokeCap.Round)
+                                                Column(horizontalAlignment=Alignment.CenterHorizontally){Text("%02d:%02d".format(left/60000,(left/1000)%60),fontSize=45.sp,color=Ink,fontWeight=FontWeight.Light);Text(if(current.running)"IN YOUR ELEMENT" else "A MOMENT TO BEGIN",fontSize=10.sp,letterSpacing=1.6.sp,color=Sub)}
+                                            }
+                                            Spacer(Modifier.height(20.dp))
+                                            Row(horizontalArrangement=Arrangement.spacedBy(7.dp)){
+                                                listOf(15,25,45,60).forEach{n->FilterChip(selected=duration==n,onClick={if(!current.running){duration=n;store.configure(n);revision++}},label={Text("${n}m",fontSize=12.sp)},colors=FilterChipDefaults.filterChipColors(selectedContainerColor=Blush,selectedLabelColor=Rose))}
+                                            }
+                                            Spacer(Modifier.height(16.dp))
+                                            Button(onClick={
+                                                if(current.running){store.pause()}else{store.start()}
+                                                revision++
+                                            },modifier=Modifier.fillMaxWidth().height(56.dp),shape=RoundedCornerShape(17.dp)){
+                                                Icon(if(current.running)Icons.Rounded.Pause else Icons.Rounded.PlayArrow,null);Spacer(Modifier.width(9.dp));Text(if(current.running)"Pause focus" else if(left<current.durationMinutes*60_000L)"Resume focus" else "Begin focus",fontWeight=FontWeight.Bold)
+                                            }
+                                            if(current.running||left<current.durationMinutes*60_000L)TextButton(onClick={store.abandon();revision++}){Text("End session",color=Sub)}
+                                        }
+                                    }
+                                    Row(verticalAlignment=Alignment.CenterVertically,modifier=Modifier.fillMaxWidth()){
+                                        Text("Soundscapes",fontSize=19.sp,fontWeight=FontWeight.Bold,color=Ink,modifier=Modifier.weight(1f))
+                                        TextButton(onClick={openSound=true}){Text("See all",color=Rose)}
+                                    }
+                                    Surface(shape=RoundedCornerShape(22.dp),color=Color.White){
+                                        Row(Modifier.fillMaxWidth().padding(15.dp),verticalAlignment=Alignment.CenterVertically){
+                                            Surface(shape=RoundedCornerShape(15.dp),color=Blush){Icon(Icons.Rounded.GraphicEq,null,tint=Rose,modifier=Modifier.padding(14.dp))}
+                                            Spacer(Modifier.width(12.dp))
+                                            Column(Modifier.weight(1f)){Text(Ambients.all.first{it.id==sound}.label,fontWeight=FontWeight.Bold,color=Ink);Text("Offline ambience",fontSize=12.sp,color=Sub)}
+                                            IconButton(onClick={
+                                                if(playing){stopService(Intent(this@MainActivity,SoundService::class.java));playing=false}
+                                                else {val i=Intent(this@MainActivity,SoundService::class.java).putExtra("sound",sound);try{startForegroundService(i);playing=true}catch (_:Exception){playing=false}}
+                                            }){Icon(if(playing)Icons.Rounded.StopCircle else Icons.Rounded.PlayCircle,null,tint=Rose,modifier=Modifier.size(32.dp))}
+                                        }
+                                    }
+                                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){
+                                        MiniMetric("${today} min","TODAY",Modifier.weight(1f))
+                                        MiniMetric("${store.dailyGoal()} min","DAILY GOAL",Modifier.weight(1f))
+                                    }
+                                }
+                                1->{
+                                    Header("Plan with purpose.","A little structure, more room to breathe.")
+                                    val month=YearMonth.from(selectedDate)
+                                    Surface(shape=RoundedCornerShape(25.dp),color=Color.White){
+                                        Column(Modifier.padding(16.dp)){
+                                            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween){
+                                                IconButton(onClick={selectedDate=selectedDate.minusMonths(1).withDayOfMonth(1)}){Icon(Icons.Rounded.ChevronLeft,null)}
+                                                Text(month.format(DateTimeFormatter.ofPattern("MMMM yyyy")),fontSize=18.sp,fontWeight=FontWeight.Bold,color=Ink)
+                                                IconButton(onClick={selectedDate=selectedDate.plusMonths(1).withDayOfMonth(1)}){Icon(Icons.Rounded.ChevronRight,null)}
+                                            }
+                                            Row(Modifier.fillMaxWidth()){listOf("M","T","W","T","F","S","S").forEach{Box(Modifier.weight(1f).height(32.dp),contentAlignment=Alignment.Center){Text(it,fontSize=11.sp,color=Sub)}}}
+                                            val first=month.atDay(1).dayOfWeek.value-1
+                                            val dates=(0 until (first+month.lengthOfMonth()+6)/7*7).map{if(it<first||it>=first+month.lengthOfMonth())null else month.atDay(it-first+1)}
+                                            dates.chunked(7).forEach{week->Row(Modifier.fillMaxWidth()){week.forEach{day->
+                                                Box(Modifier.weight(1f).height(44.dp).clickable(enabled=day!=null){if(day!=null)selectedDate=day},contentAlignment=Alignment.Center){
+                                                    if(day!=null){
+                                                        if(day==selectedDate)Box(Modifier.size(35.dp).background(Rose,CircleShape))
+                                                        Column(horizontalAlignment=Alignment.CenterHorizontally){
+                                                            Text("${day.dayOfMonth}",fontSize=13.sp,fontWeight=if(day==selectedDate)FontWeight.Bold else FontWeight.Medium,color=if(day==selectedDate)Color.White else Ink)
+                                                            if(plans.any{it.date==day.toString()})Box(Modifier.padding(top=2.dp).size(4.dp).background(if(day==selectedDate)Color.White else Rose,CircleShape))
+                                                        }
+                                                    }
+                                                }
+                                            }}}
+                                        }
+                                    }
+                                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+                                        Column(Modifier.weight(1f)){Text(selectedDate.format(DateTimeFormatter.ofPattern("EEEE, d MMMM")),fontWeight=FontWeight.Bold,fontSize=18.sp,color=Ink);Text("${plans.count{it.date==selectedDate.toString()}} planned tasks",color=Sub,fontSize=12.sp)}
+                                        FilledIconButton(onClick={adding=true},colors=IconButtonDefaults.filledIconButtonColors(containerColor=Rose)){Icon(Icons.Rounded.Add,"New task")}
+                                    }
+                                    val dayPlans=plans.filter{it.date==selectedDate.toString()}.sortedBy{it.time}
+                                    if(dayPlans.isEmpty())EmptyPanel("A fresh page","Add a small intention for this day.")
+                                    dayPlans.forEach{task->
+                                        Surface(shape=RoundedCornerShape(19.dp),color=Color.White){
+                                            Row(Modifier.fillMaxWidth().clickable{editTask=task}.padding(13.dp),verticalAlignment=Alignment.CenterVertically){
+                                                Checkbox(checked=task.done,onCheckedChange={store.replaceTask(task.copy(done=it));revision++},colors=CheckboxDefaults.colors(checkedColor=Rose))
+                                                Column(Modifier.weight(1f)){Text(task.title,fontWeight=FontWeight.SemiBold,color=if(task.done)Sub else Ink,textDecoration=if(task.done)TextDecoration.LineThrough else null)
+                                                    Text("${task.time}  ·  ${task.duration} min${if(task.remind)"  ·  Reminder" else ""}",color=Sub,fontSize=11.sp)}
+                                                Icon(Icons.Rounded.Edit,null,tint=Sub,modifier=Modifier.size(17.dp))
+                                            }
+                                        }
+                                    }
+                                    Button(onClick={adding=true},modifier=Modifier.fillMaxWidth().height(52.dp),shape=RoundedCornerShape(16.dp)){Icon(Icons.Rounded.Add,null);Spacer(Modifier.width(8.dp));Text("Plan something")}
+                                }
+                                2->{
+                                    Header("Progress, softly.","Consistency is a practice.")
+                                    Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){
+                                        MiniMetric("${today} min","TODAY",Modifier.weight(1f))
+                                        MiniMetric("${total} min","ALL TIME",Modifier.weight(1f))
+                                    }
+                                    Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){
+                                        MiniMetric("${logs.size}","SESSIONS",Modifier.weight(1f))
+                                        MiniMetric("${stage+1} / 6","TURTLE STAGE",Modifier.weight(1f))
+                                    }
+                                    Surface(shape=RoundedCornerShape(25.dp),color=Color.White){
+                                        Column(Modifier.fillMaxWidth().padding(20.dp)){
+                                            Text("Last seven days",fontWeight=FontWeight.Bold,fontSize=18.sp,color=Ink)
+                                            Spacer(Modifier.height(26.dp))
+                                            val days=(6 downTo 0).map{LocalDate.now().minusDays(it.toLong())}
+                                            val tallies=days.map{day->logs.filter{Instant.ofEpochMilli(it.at).atZone(ZoneId.systemDefault()).toLocalDate()==day}.sumOf{it.minutes}}
+                                            val max=tallies.maxOrNull()?.coerceAtLeast(30)?:30
+                                            Row(Modifier.fillMaxWidth().height(140.dp),horizontalArrangement=Arrangement.spacedBy(10.dp),verticalAlignment=Alignment.Bottom){
+                                                days.forEachIndexed{idx,day->Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Bottom){
+                                                    Text(if(tallies[idx]>0)"${tallies[idx]}" else "",fontSize=10.sp,color=Sub)
+                                                    Spacer(Modifier.height(4.dp))
+                                                    Box(Modifier.fillMaxWidth(.67f).height((max(5f,(tallies[idx].toFloat()/max)*90f)).dp).background(if(day==LocalDate.now())Rose else Blush,RoundedCornerShape(topStart=6.dp,topEnd=6.dp)))
+                                                    Spacer(Modifier.height(7.dp))
+                                                    Text(day.dayOfWeek.name.take(1),fontSize=12.sp,color=Sub)
+                                                }}
+                                            }
+                                        }
+                                    }
+                                    Surface(shape=RoundedCornerShape(23.dp),color=Color.White){
+                                        Column(Modifier.padding(20.dp)){
+                                            Text("Small steps become chapters",fontSize=18.sp,fontWeight=FontWeight.Bold,color=Ink)
+                                            TurtleScene(stage,Modifier.fillMaxWidth().height(195.dp))
+                                            Text("Your companion evolves only after completed focus sessions.",color=Sub,fontSize=13.sp)
                                         }
                                     }
                                 }
-                            }
-                            1->{
-                                Text("Your priorities.",fontSize=33.sp,fontWeight=FontWeight.Bold)
-                                Text("Keep it simple. Do what matters.",color=muted)
-                                Row(verticalAlignment=Alignment.CenterVertically){
-                                    OutlinedTextField(newTask,{newTask=it},Modifier.weight(1f),placeholder={Text("Add a task")},singleLine=true,shape=RoundedCornerShape(17.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    IconButton(onClick={if(newTask.isNotBlank()){tasks=tasks+Task(System.currentTimeMillis(),newTask.trim(),false);writeTasks(tasks);newTask=""}}){Icon(Icons.Filled.AddCircle,"Add task",tint=rose,modifier=Modifier.size(34.dp))}
-                                }
-                                tasks.forEach{t->Surface(shape=RoundedCornerShape(17.dp),color=Color.White){Row(Modifier.fillMaxWidth().padding(13.dp),verticalAlignment=Alignment.CenterVertically){
-                                    Checkbox(t.done,{done->tasks=tasks.map{if(it.id==t.id)it.copy(done=done) else it};writeTasks(tasks)})
-                                    Text(t.name,Modifier.weight(1f),color=ink,textDecoration=if(t.done)TextDecoration.LineThrough else TextDecoration.None)
-                                    IconButton(onClick={tasks=tasks.filterNot{it.id==t.id};writeTasks(tasks)}){Icon(Icons.Filled.Close,"Delete",tint=muted)}
-                                }}}
-                                if(tasks.isEmpty())Text("Nothing on your list. Add one meaningful task.",color=muted)
-                            }
-                            2->{
-                                Text("Your progress.",fontSize=33.sp,fontWeight=FontWeight.Bold)
-                                Text("Consistency, not perfection.",color=muted)
-                                Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){
-                                    Metric("TODAY","${today}m",Modifier.weight(1f))
-                                    Metric("TOTAL","${minutes}m",Modifier.weight(1f))
-                                }
-                                Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){
-                                    Metric("SESSIONS","${sessions}",Modifier.weight(1f))
-                                    Metric("TURTLE", "${stage+1}/6",Modifier.weight(1f))
-                                }
-                                Surface(color=Color.White,shape=RoundedCornerShape(24.dp)){
-                                    Column(Modifier.fillMaxWidth().padding(22.dp)){
-                                        Text("Your next evolution",fontWeight=FontWeight.Bold,fontSize=19.sp)
-                                        Spacer(Modifier.height(12.dp))
-                                        Turtle(stage,Modifier.fillMaxWidth().height(180.dp))
-                                        Text("Every finished session helps your turtle grow.",color=muted,fontSize=13.sp)
+                                else->{
+                                    Header("Make it yours.","A little control goes a long way.")
+                                    Surface(shape=RoundedCornerShape(23.dp),color=Color.White){
+                                        Column(Modifier.fillMaxWidth().padding(19.dp)){
+                                            Text("Daily intention",fontSize=17.sp,fontWeight=FontWeight.Bold)
+                                            Text("${goal.toInt()} min per day",color=Rose,fontWeight=FontWeight.SemiBold)
+                                            Slider(value=goal,onValueChange={goal=it},onValueChangeFinished={store.setDailyGoal(goal.toInt())},valueRange=30f..360f,steps=10)
+                                            HorizontalDivider(color=Border)
+                                            Spacer(Modifier.height(10.dp))
+                                            Row(verticalAlignment=Alignment.CenterVertically){
+                                                Column(Modifier.weight(1f)){Text("Focus Do Not Disturb",fontWeight=FontWeight.Bold);Text("Quiet non-priority notifications while you focus.",fontSize=12.sp,color=Sub)}
+                                                Switch(checked=dnd,onCheckedChange={dnd=it;store.setDnd(it);if(it&&!FocusDnd.allowed(this@MainActivity))startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))})
+                                            }
+                                            Text("Requires system permission. Android may allow priority calls, alarms and user-defined exceptions.",fontSize=11.sp,color=Sub)
+                                            TextButton(onClick={startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))}){Text("Manage interruption access")}
+                                            HorizontalDivider(color=Border)
+                                            Spacer(Modifier.height(12.dp))
+                                            Text("Sound volume",fontWeight=FontWeight.Bold)
+                                            Slider(value=volume,onValueChange={volume=it;store.setVolume(it);if(playing)startService(Intent(this@MainActivity,SoundService::class.java).setAction("volume"))})
+                                        }
                                     }
-                                }
-                            }
-                            else->{
-                                Text("Your space.",fontSize=33.sp,fontWeight=FontWeight.Bold)
-                                Text("Personal, private and distraction-free.",color=muted)
-                                Surface(color=Color.White,shape=RoundedCornerShape(22.dp)){
-                                    Column(Modifier.padding(18.dp)){
-                                        Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Focus Do Not Disturb",fontWeight=FontWeight.Bold);Text("Restrict interruptions during active focus.",fontSize=12.sp,color=muted)};Switch(dnd,{dnd=it;prefs.edit().putBoolean("enable_dnd",it).apply();if(it && !notificationManager.isNotificationPolicyAccessGranted)startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))})}
-                                        HorizontalDivider(Modifier.padding(vertical=13.dp),color=background)
-                                        Text("Requires Android Do Not Disturb access. Priority contacts, alarms and system exceptions follow your device's settings.",fontSize=12.sp,color=muted)
-                                        Spacer(Modifier.height(10.dp))
-                                        OutlinedButton(onClick={startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))}){Text("Manage DND permission")}
+                                    Surface(shape=RoundedCornerShape(22.dp),color=Color.White){
+                                        Column(Modifier.padding(19.dp)){Text("Private by design",fontWeight=FontWeight.Bold,fontSize=17.sp);Spacer(Modifier.height(7.dp));Text("Your plans, focus history and turtle live on this device. No accounts, cloud backup, analytics trackers or AI.",color=Sub,fontSize=13.sp)}
                                     }
+                                    Text("STAYCALM · VERSION 2.0",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
                                 }
-                                Surface(color=Color.White,shape=RoundedCornerShape(22.dp)){Column(Modifier.fillMaxWidth().padding(20.dp)){Text("Local-only storage",fontWeight=FontWeight.Bold);Text("No account. No cloud. No tracking. Your progress and tasks remain on this device.",color=muted,fontSize=13.sp)}}
-                                TextButton(onClick={dialog=true}){Text("Reset turtle & progress",color=rose)}
                             }
+                            Spacer(Modifier.height(24.dp))
                         }
-                        Spacer(Modifier.height(22.dp))
                     }
                 }
             }
-            if(dialog)AlertDialog(onDismissRequest={dialog=false},title={Text("Reset all focus progress?")},text={Text("This clears your turtle growth, completed sessions and minutes. Tasks will stay.")},confirmButton={TextButton(onClick={minutes=0;sessions=0;today=0;prefs.edit().putInt("minutes",0).putInt("sessions",0).putInt("today_minutes",0).apply();dialog=false}){Text("Reset",color=rose)}},dismissButton={TextButton(onClick={dialog=false}){Text("Cancel")}})
+            if(openSound)AlertDialog(onDismissRequest={openSound=false},title={Text("Find your atmosphere")},text={
+                Column(Modifier.heightIn(max=455.dp).verticalScroll(rememberScrollState())){
+                    Ambients.all.forEach {ambient->
+                        Row(Modifier.fillMaxWidth().clickable{
+                            sound=ambient.id;store.setSound(sound);openSound=false
+                            if(playing)startService(Intent(this@MainActivity,SoundService::class.java).putExtra("sound",sound))
+                        }.padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically){
+                            Icon(Icons.Rounded.GraphicEq,null,tint=if(sound==ambient.id)Rose else Sub)
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)){Text(ambient.label,fontWeight=FontWeight.Bold);Text(ambient.detail,fontSize=12.sp,color=Sub)}
+                            if(sound==ambient.id)Icon(Icons.Rounded.Check,null,tint=Rose)
+                        }
+                        HorizontalDivider(color=Border)
+                    }
+                }
+            },confirmButton={TextButton(onClick={openSound=false}){Text("Done")}})
+            if(adding||editTask!=null){
+                PlanEditor(editTask,selectedDate,onDismiss={adding=false;editTask=null},onSave={title,date,time,duration,remind->
+                    val old=editTask
+                    if(old==null)store.addTask(title,date,time,duration,remind)
+                    else store.replaceTask(old.copy(title=title,date=date.toString(),time=time,duration=duration,remind=remind))
+                    selectedDate=date;revision++;adding=false;editTask=null
+                },onDelete={item->store.deleteTask(item);revision++;editTask=null;adding=false})
+            }
         }
-    }
-    private fun readTasks():List<Task> = getSharedPreferences(PREF,MODE_PRIVATE).getString("tasks","")!!.split("\n").mapNotNull{val p=it.split("|",limit=3);if(p.size==3)Task(p[0].toLongOrNull()?:0,p[2],p[1]=="1") else null}
-    private fun writeTasks(t:List<Task>){prefs.edit().putString("tasks",t.joinToString("\n"){"${it.id}|${if(it.done)1 else 0}|${it.name.replace("|"," ").replace("\n"," ")}"}).apply()}
-}
-private data class Task(val id:Long,val name:String,val done:Boolean)
-@Composable private fun Metric(label:String,value:String,modifier:Modifier=Modifier){
-    Surface(modifier,shape=RoundedCornerShape(22.dp),color=Color.White){
-        Column(Modifier.padding(19.dp)){Text(label,fontSize=11.sp,fontWeight=FontWeight.Bold,color=muted,letterSpacing=1.sp);Spacer(Modifier.height(10.dp));Text(value,fontWeight=FontWeight.Bold,fontSize=34.sp,color=ink)}
     }
 }
 
-@Composable private fun Turtle(stage:Int, modifier:Modifier=Modifier){
-    val transition=rememberInfiniteTransition(label="turtle")
-    val bob by transition.animateFloat(initialValue=-3f,targetValue=3f,animationSpec=infiniteRepeatable(tween(1700,easing=EaseInOutSine),RepeatMode.Reverse),label="bob")
-    val breathe by transition.animateFloat(initialValue=.97f,targetValue=1.025f,animationSpec=infiniteRepeatable(tween(2100,easing=EaseInOutSine),RepeatMode.Reverse),label="breathe")
-    Canvas(modifier){val scale=size.minDimension/220f; val x=size.width/2f; val y=size.height/2f;drawContext.transform.translate(x,y);drawContext.transform.scale(scale,scale,Offset.Zero)
-        drawOval(color=Color(0xFFE8D9DF),topLeft=Offset(-91f,83f),size=androidx.compose.ui.geometry.Size(182f,16f))
+@Composable private fun Header(title:String,subtitle:String){
+    Column(verticalArrangement=Arrangement.spacedBy(6.dp)){Text(title,fontSize=30.sp,fontWeight=FontWeight.Bold,color=Ink,letterSpacing=(-1).sp);Text(subtitle,fontSize=13.sp,color=Sub)}
+}
+@Composable private fun SmallLabel(s:String){Text(s,fontSize=10.sp,letterSpacing=1.3.sp,fontWeight=FontWeight.Bold,color=Sub)}
+@Composable private fun MiniMetric(value:String,label:String,modifier:Modifier=Modifier){
+    Surface(modifier,shape=RoundedCornerShape(20.dp),color=Color.White){
+        Column(Modifier.padding(19.dp)){Text(value,fontSize=25.sp,fontWeight=FontWeight.Bold,color=Ink);Spacer(Modifier.height(3.dp));SmallLabel(label)}
+    }
+}
+@Composable private fun EmptyPanel(title:String,subtitle:String){
+    Surface(shape=RoundedCornerShape(23.dp),color=Color.White){
+        Column(Modifier.fillMaxWidth().padding(vertical=34.dp),horizontalAlignment=Alignment.CenterHorizontally){
+            Icon(Icons.Rounded.AutoAwesome,null,tint=Rose,modifier=Modifier.size(26.dp));Spacer(Modifier.height(8.dp))
+            Text(title,fontWeight=FontWeight.Bold,color=Ink);Text(subtitle,fontSize=12.sp,color=Sub)
+        }
+    }
+}
+@Composable private fun PlanEditor(item:PlanItem?,initialDate:LocalDate,onDismiss:()->Unit,onSave:(String,LocalDate,String,Int,Boolean)->Unit,onDelete:(PlanItem)->Unit){
+    var title by remember(item){mutableStateOf(item?.title?:"")}
+    var date by remember(item){mutableStateOf(runCatching{LocalDate.parse(item?.date?:initialDate.toString())}.getOrDefault(initialDate))}
+    var time by remember(item){mutableStateOf(item?.time?:"09:00")}
+    var duration by remember(item){mutableIntStateOf(item?.duration?:25)}
+    var remind by remember(item){mutableStateOf(item?.remind?:true)}
+    val context=androidx.compose.ui.platform.LocalContext.current
+    AlertDialog(onDismissRequest=onDismiss,title={Text(if(item==null)"New intention" else "Edit intention",fontWeight=FontWeight.Bold)},text={
+        Column(verticalArrangement=Arrangement.spacedBy(12.dp)){
+            OutlinedTextField(title,{title=it},label={Text("What will you work on?")},singleLine=true,modifier=Modifier.fillMaxWidth())
+            OutlinedButton(onClick={
+                DatePickerDialog(context,{_,year,month,day->date=LocalDate.of(year,month+1,day)},date.year,date.monthValue-1,date.dayOfMonth).show()
+            },modifier=Modifier.fillMaxWidth()){Icon(Icons.Rounded.CalendarMonth,null);Spacer(Modifier.width(8.dp));Text(date.format(DateTimeFormatter.ofPattern("EEE, d MMM yyyy")))}
+            OutlinedButton(onClick={
+                val parts=time.split(":");TimePickerDialog(context,{_,hour,min->time="%02d:%02d".format(hour,min)},parts[0].toIntOrNull()?:9,parts.getOrNull(1)?.toIntOrNull()?:0,true).show()
+            },modifier=Modifier.fillMaxWidth()){Icon(Icons.Rounded.Schedule,null);Spacer(Modifier.width(8.dp));Text(time)}
+            Text("Expected time · ${duration} min",fontSize=13.sp,color=Sub)
+            Slider(value=duration.toFloat(),onValueChange={duration=(it/5).roundToInt()*5},valueRange=5f..180f)
+            Row(verticalAlignment=Alignment.CenterVertically){Text("Remind me",modifier=Modifier.weight(1f));Switch(checked=remind,onCheckedChange={remind=it})}
+            if(item!=null)TextButton(onClick={onDelete(item)}){Text("Delete task",color=Rose)}
+        }
+    },confirmButton={TextButton(enabled=title.isNotBlank(),onClick={onSave(title.trim(),date,time,duration,remind)}){Text("Save plan")}},dismissButton={TextButton(onClick=onDismiss){Text("Cancel")}})
+}
+
+@Composable private fun TurtleScene(stage:Int,modifier:Modifier=Modifier){
+    val transition=rememberInfiniteTransition(label="breathing")
+    val breathe by transition.animateFloat(initialValue=.96f,targetValue=1.035f,animationSpec=infiniteRepeatable(tween(1800,easing=FastOutSlowInEasing),RepeatMode.Reverse),label="float")
+    val drift by transition.animateFloat(initialValue=-3.5f,targetValue=3.5f,animationSpec=infiniteRepeatable(tween(2300,easing=EaseInOutSine),RepeatMode.Reverse),label="drift")
+    val crack by animateFloatAsState(targetValue=if(stage>=1)1f else 0f,animationSpec=spring(dampingRatio=Spring.DampingRatioMediumBouncy,stiffness=Spring.StiffnessLow),label="crack")
+    val open by animateFloatAsState(targetValue=if(stage>=2)1f else 0f,animationSpec=spring(dampingRatio=Spring.DampingRatioLowBouncy,stiffness=Spring.StiffnessVeryLow),label="hatch")
+    val sizeScale by animateFloatAsState(targetValue=when(stage){3->.69f;4->.88f;5->1.05f;else->.7f},animationSpec=spring(dampingRatio=Spring.DampingRatioMediumBouncy,stiffness=Spring.StiffnessVeryLow),label="grow")
+    Canvas(modifier){
+        val k=min(size.width/250f,size.height/220f)
+        drawContext.transform.translate(size.width/2f,size.height/2f)
+        drawContext.transform.scale(k,k,Offset.Zero)
+        drawOval(Color(0xFFEDE4E5),Offset(-87f,82f),Size(174f,15f))
+        drawCircle(Blush,98f,Offset.Zero,alpha=.25f)
         if(stage<=2){
-            drawOval(Color(0xFFF2DEDA),topLeft=Offset(-67f,-72f+bob),size=androidx.compose.ui.geometry.Size(134f,155f))
-            drawOval(Color(0xFFFFF8F3),topLeft=Offset(-56f,-65f+bob),size=androidx.compose.ui.geometry.Size(112f,140f))
-            if(stage>=1){val p=Path().apply{moveTo(-50f,-18f+bob);lineTo(-25f,-35f+bob);lineTo(-13f,-17f+bob);lineTo(4f,-44f+bob);lineTo(23f,-27f+bob);lineTo(52f,-45f+bob)};drawPath(p,rose,style=Stroke(width=3.7f,cap=StrokeCap.Round,join=StrokeJoin.Round))}
-            if(stage>=2){
-                drawOval(moss,Offset(-31f,-55f+bob),androidx.compose.ui.geometry.Size(61f,68f))
-                drawCircle(ink,3.8f,Offset(-12f,-28f+bob));drawCircle(ink,3.8f,Offset(12f,-28f+bob))
-                drawArc(ink,15f,150f,false,Offset(-10f,-23f+bob),androidx.compose.ui.geometry.Size(20f,16f),style=Stroke(2f))
-                drawArc(Color(0xFFEBCEC6),0f,180f,false,Offset(-65f,-10f+bob),androidx.compose.ui.geometry.Size(130f,92f),style=Stroke(4f))
+            val floating=drift
+            if(stage==2){
+                drawOval(Green,Offset(-38f,-59f+floating),Size(76f,93f))
+                drawCircle(Ink,4.3f,Offset(-16f,-31f+floating));drawCircle(Ink,4.3f,Offset(16f,-31f+floating))
+                drawArc(Ink,15f,150f,false,Offset(-10f,-28f+floating),Size(20f,15f),style=Stroke(width=2.2f))
+            }
+            drawOval(Color(0xFFE6CCCF),Offset(-63f,-75f+floating),Size(126f,160f))
+            drawOval(Color(0xFFFFF7F1),Offset(-57f,-71f+floating),Size(114f,150f))
+            val jagged=Path().apply{
+                moveTo(-55f,-8f+floating);lineTo(-35f,-19f+floating);lineTo(-24f,-8f+floating)
+                lineTo(-9f,-27f+floating);lineTo(9f,-11f+floating);lineTo(25f,-26f+floating)
+                lineTo(39f,-14f+floating);lineTo(56f,-23f+floating)
+            }
+            if(stage>=1)drawPath(jagged,Rose,alpha=crack,style=Stroke(3.1f,cap=StrokeCap.Round,join=StrokeJoin.Round))
+            if(stage==2){
+                val topY=-open*40f
+                drawArc(Color(0xFFFFF7F1),180f,180f,true,Offset(-57f,-75f+floating+topY),Size(114f,80f))
+                drawPath(jagged,Rose,style=Stroke(2.5f))
+                drawArc(Color(0xFFE3CED0),0f,180f,false,Offset(-60f,7f+floating),Size(120f,79f),style=Stroke(4f))
             }
         }else{
-            val grow=when(stage){3->.72f;4->.89f;else->1.07f}
-            drawContext.transform.scale(grow*breathe,grow*breathe,Offset.Zero)
-            drawOval(moss,Offset(-69f,48f+bob),androidx.compose.ui.geometry.Size(48f,28f))
-            drawOval(moss,Offset(22f,48f+bob),androidx.compose.ui.geometry.Size(48f,28f))
-            drawOval(moss,Offset(-64f,-39f+bob),androidx.compose.ui.geometry.Size(128f,119f))
-            drawOval(shell,Offset(-59f,-43f+bob),androidx.compose.ui.geometry.Size(118f,113f))
-            drawOval(Color(0xFF578979),Offset(-45f,-35f+bob),androidx.compose.ui.geometry.Size(90f,82f))
-            val seam=Color(0xFF9AC1A6)
-            drawLine(seam,Offset(0f,-28f+bob),Offset(0f,52f+bob),2.5f)
-            drawLine(seam,Offset(-41f,5f+bob),Offset(41f,5f+bob),2.5f)
-            drawLine(seam,Offset(-34f,-15f+bob),Offset(0f,5f+bob),2.5f)
-            drawLine(seam,Offset(34f,-15f+bob),Offset(0f,5f+bob),2.5f)
-            drawOval(moss,Offset(-49f,-83f+bob),androidx.compose.ui.geometry.Size(98f,78f))
-            drawCircle(ink,4.8f,Offset(-19f,-47f+bob));drawCircle(ink,4.8f,Offset(19f,-47f+bob))
-            drawArc(ink,15f,150f,false,Offset(-13f,-43f+bob),androidx.compose.ui.geometry.Size(26f,18f),style=Stroke(2.3f))
-            drawCircle(Color(0xFFDFA49E),7f,Offset(-37f,-34f+bob),alpha=.7f)
-            drawCircle(Color(0xFFDFA49E),7f,Offset(37f,-34f+bob),alpha=.7f)
+            drawContext.transform.scale(sizeScale*breathe,sizeScale*breathe,Offset.Zero)
+            val y=drift
+            drawOval(Green,Offset(-72f,24f+y),Size(52f,45f))
+            drawOval(Green,Offset(22f,24f+y),Size(52f,45f))
+            drawOval(Green,Offset(-74f,-23f+y),Size(38f,41f))
+            drawOval(Green,Offset(37f,-23f+y),Size(38f,41f))
+            val tail=Path().apply{moveTo(3f,69f+y);lineTo(-9f,87f+y);lineTo(-19f,65f+y);close()}
+            drawPath(tail,Green)
+            drawOval(DarkGreen,Offset(-63f,-46f+y),Size(126f,120f))
+            drawOval(Color(0xFF578B76),Offset(-52f,-36f+y),Size(104f,100f))
+            val seam=Color(0xFF9CC4AA)
+            drawLine(seam,Offset(0f,-30f+y),Offset(0f,62f+y),3f)
+            drawLine(seam,Offset(-48f,17f+y),Offset(48f,17f+y),3f)
+            drawLine(seam,Offset(-42f,-11f+y),Offset(0f,17f+y),3f)
+            drawLine(seam,Offset(42f,-11f+y),Offset(0f,17f+y),3f)
+            drawLine(seam,Offset(-40f,42f+y),Offset(0f,17f+y),3f)
+            drawLine(seam,Offset(40f,42f+y),Offset(0f,17f+y),3f)
+            drawOval(Green,Offset(-51f,-89f+y),Size(102f,80f))
+            drawCircle(Ink,5f,Offset(-20f,-51f+y));drawCircle(Ink,5f,Offset(20f,-51f+y))
+            drawCircle(Color.White,1.8f,Offset(-21.5f,-53f+y));drawCircle(Color.White,1.8f,Offset(18.5f,-53f+y))
+            drawArc(Ink,10f,160f,false,Offset(-13f,-42f+y),Size(26f,15f),style=Stroke(2.5f))
+            drawCircle(Color(0xFFDB9E9A),7f,Offset(-38f,-41f+y),alpha=.55f)
+            drawCircle(Color(0xFFDB9E9A),7f,Offset(38f,-41f+y),alpha=.55f)
         }
     }
-}
-
-class SoundService:Service(){
-    private var track:AudioTrack?=null
-    private var thread:Thread?=null
-    @Volatile private var active=false
-    private val channel="staycalm_audio"
-    override fun onBind(intent:Intent?)=null
-    override fun onCreate(){super.onCreate();val nm=getSystemService(NotificationManager::class.java);nm.createNotificationChannel(NotificationChannel(channel,"Ambient sound playback",NotificationManager.IMPORTANCE_LOW))}
-    override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int{
-        val sound=intent?.getStringExtra("sound")?:"Rain"
-        val notification=Notification.Builder(this,channel).setSmallIcon(android.R.drawable.ic_media_play).setContentTitle("STAYCALM • ${sound}").setContentText("Ambient sound is playing").setOngoing(true).setContentIntent(PendingIntent.getActivity(this,0,Intent(this,MainActivity::class.java),PendingIntent.FLAG_IMMUTABLE)).build()
-        startForeground(23,notification)
-        startSound(sound)
-        return START_NOT_STICKY
-    }
-    @Synchronized private fun startSound(sound:String){
-        stopSound()
-        active=true
-        thread=Thread{
-            val rate=22050
-            val size=AudioTrack.getMinBufferSize(rate,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT).coerceAtLeast(4096)
-            val audio=AudioTrack.Builder().setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build()).setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(rate).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build()).setBufferSizeInBytes(size*2).setTransferMode(AudioTrack.MODE_STREAM).build()
-            track=audio
-            val rnd=Random(System.nanoTime());val samples=ShortArray(2048)
-            var low=0.0;var middle=0.0;var wave=0.0
-            try{
-                audio.play()
-                while(active && !Thread.currentThread().isInterrupted){
-                    for(i in samples.indices){
-                        val white=rnd.nextDouble(-1.0,1.0)
-                        low=low*.985+white*.015
-                        middle=middle*.92+white*.08
-                        wave+=1.0/rate
-                        val v=when(sound){
-                            "Rain"->white*.10+middle*.29
-                            "Ocean"->middle*(.24+.19*sin(wave*2*PI/7))+low*.9
-                            "Forest"->low*.7+middle*.24+sin(wave*2*PI*520)*.018*(if(sin(wave*2*PI/3)>.75)1 else 0)
-                            "White Noise"->white*.23
-                            "Brown Noise"->low*1.55
-                            else->low*.92+middle*.17+sin(wave*2*PI*115)*.025
-                        }
-                        samples[i]=(v.coerceIn(-.85,.85)*32767).toInt().toShort()
-                    }
-                    audio.write(samples,0,samples.size)
-                }
-            }catch (_:Exception){}finally{try{audio.pause();audio.flush();audio.release()}catch (_:Exception){}}
-        }.apply{name="StaycalmAudio";isDaemon=true;start()}
-    }
-    @Synchronized private fun stopSound(){active=false;thread?.interrupt();thread=null;try{track?.pause();track?.flush()}catch (_:Exception){};track=null}
-    override fun onDestroy(){stopSound();super.onDestroy()}
 }
