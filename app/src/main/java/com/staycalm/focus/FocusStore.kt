@@ -226,7 +226,7 @@ object Notice {
         try{context.getSystemService(NotificationManager::class.java).notify(1002,sessionNotification(context,finishAt,mode))}catch (_:SecurityException){}
     }
     fun sessionStopped(context:Context){
-        context.stopService(Intent(context,TimerService::class.java))
+        TimerService.stop(context)
         context.getSystemService(NotificationManager::class.java).cancel(1002)
     }
     fun finished(context:Context,minutes:Int,mode:String)=post(context,FINISH,1001,if(mode=="focus")"Focus completed" else "Break completed",if(mode=="focus")"Your ${minutes}-minute session is complete. Your turtle grew." else "Time for a fresh start.")

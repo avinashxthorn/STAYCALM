@@ -29,6 +29,13 @@ class TimerService : Service() {
 
     override fun onBind(intent: Intent?) = null
 
+    override fun onCreate() {
+        super.onCreate()
+        val state = FocusStore(this).state()
+        startForeground(1002, Notice.sessionNotification(this, state.endWall, state.mode))
+        activeService = this
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val store = FocusStore(this)
         val state = store.state()
@@ -45,6 +52,7 @@ class TimerService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
+        if (activeService === this) activeService = null
         val store = FocusStore(this)
         val state = store.state()
         val unlocked = state.running && !store.lockTimerNotification()
@@ -57,6 +65,19 @@ class TimerService : Service() {
     companion object {
         private val mainHandler = Handler(Looper.getMainLooper())
         private val startQueued = java.util.concurrent.atomic.AtomicBoolean(false)
+        @Volatile private var activeService: TimerService? = null
+
+        fun stop(context: Context) {
+            val app = context.applicationContext
+            mainHandler.post {
+                val store = FocusStore(app)
+                if (!store.state().running || !store.lockTimerNotification()) {
+                    // A pending startup must first enter the foreground, then stop itself.
+                    // Stopping it before onCreate can otherwise leave Android's timeout armed.
+                    activeService?.stopSelf()
+                }
+            }
+        }
 
         fun ensureRunning(context: Context) {
             // Request startup only when the main looper can actually create the service.
@@ -70,7 +91,7 @@ class TimerService : Service() {
                 val state = store.state()
                 if (!state.running) return@post
                 if (!store.lockTimerNotification()) {
-                    app.stopService(Intent(app, TimerService::class.java))
+                    stop(app)
                     Notice.sessionStarted(app, state.endWall, state.mode)
                     return@post
                 }
