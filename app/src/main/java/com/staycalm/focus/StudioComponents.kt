@@ -76,7 +76,7 @@ fun StudioFocus(
                         val radius=size.minDimension/2.0f-15.dp.toPx()
                         drawCircle(Brush.radialGradient(listOf(Color(0xFF865467).copy(alpha=.32f),Color.Transparent),center=center,radius=radius*1.28f),radius=radius*1.23f,center=center)
                         drawCircle(Color.White.copy(alpha=.11f),radius=radius,center=center,style=Stroke(width=7.dp.toPx()))
-                        drawArc(brush=Brush.sweepGradient(listOf(Color(0xFFFFA7C1),roseInk,Color(0xFFDD789B)),startAngle=-90f,sweepAngle=360f*progress,useCenter=false,topLeft=Offset(center.x-radius,center.y-radius),size=Size(radius*2,radius*2),style=Stroke(width=8.dp.toPx(),cap=StrokeCap.Round))
+                        drawArc(brush=Brush.sweepGradient(colors=listOf(Color(0xFFFFA7C1),roseInk,Color(0xFFDD789B))),startAngle=-90f,sweepAngle=360f*progress,useCenter=false,topLeft=Offset(center.x-radius,center.y-radius),size=Size(radius*2,radius*2),style=Stroke(width=8.dp.toPx(),cap=StrokeCap.Round))
                     }
                     Column(horizontalAlignment=Alignment.CenterHorizontally){
                         Text("%02d:%02d".format(remainingMs/60_000,(remainingMs/1000)%60),fontSize=48.sp,letterSpacing=(-2).sp,fontWeight=FontWeight.Medium,color=Color.White)
@@ -229,7 +229,7 @@ fun TurtleAtelier(stage:Int,modifier:Modifier=Modifier){
                         lineTo(-8f,-24f+bob);lineTo(7f,-8f+bob);lineTo(25f,-23f+bob)
                         lineTo(40f,-11f+bob);lineTo(59f,-19f+bob)
                     }
-                    drawPath(fracture,roseInk,style=Stroke(width=3f,cap=StrokeCap.Round,join=PathJoin.Round))
+                    drawPath(fracture,roseInk,style=Stroke(width=3f,cap=StrokeCap.Round,join=StrokeJoin.Round))
                     drawLine(Color(0xFFDFAAB6),Offset(-8f,-24f+bob),Offset(-12f,-42f+bob),2f)
                 }
             }else{
