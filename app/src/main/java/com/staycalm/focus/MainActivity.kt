@@ -59,7 +59,12 @@ private val StaycalmDarkColors=darkColorScheme(primary=Color(0xFFD66A9D),onPrima
 
 class MainActivity:ComponentActivity(){
     private lateinit var store:FocusStore
-    override fun onResume(){super.onResume();if(::store.isInitialized){store.completeIfDue();SessionUninstallGuard.releaseIfIdle(this);TimerService.ensureRunning(this)}}
+    override fun onResume(){super.onResume();if(::store.isInitialized){
+        store.completeIfDue()
+        SessionUninstallGuard.releaseIfIdle(this)
+        TimerService.ensureRunning(this)
+        store.tasks().filter{it.remind&&!it.done}.forEach{FocusAlarms.scheduleTask(this,it)}
+    }}
     override fun onCreate(savedInstanceState:android.os.Bundle?){super.onCreate(savedInstanceState);store=FocusStore(this);Notice.channels(this);LauncherIconSwitcher.apply(this,Personalization(this).darkMode())
         setContent {
             val personalization=remember{Personalization(this@MainActivity)}
@@ -130,6 +135,7 @@ class MainActivity:ComponentActivity(){
             var uninstallProtection by remember{mutableStateOf(store.uninstallProtectionEnabled())}
             var blockApps by remember{mutableStateOf(store.blockDistractingApps())}
             var blockerSetup by remember{mutableStateOf(false)}
+            var showBlockerLockedAlert by remember{mutableStateOf(false)}
             var protectionError by remember{mutableStateOf<String?>(null)}
             var pendingProtectedStart by rememberSaveable{mutableStateOf(false)}
             val adminPermission=rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()){
@@ -240,7 +246,7 @@ class MainActivity:ComponentActivity(){
                                     }
                                     StudioFocus(
                                         mode=mode,intention=intention,
-                                        onIntention={intention=it;store.setIntention(it)},
+                                        onIntention={intention=it;store.setIntention(it);store.saveIntentionToPlanner(it);selectedDate=LocalDate.now();revision++},
                                         onMode={newMode->store.configure(if(newMode=="break")5 else 25,mode=newMode);mode=store.state().mode;revision++},
                                         durationMinutes=current.durationMinutes,
                                         remainingMs=left,
@@ -443,12 +449,19 @@ class MainActivity:ComponentActivity(){
                                                     Text("Block distracting apps",fontWeight=FontWeight.Bold)
                                                     Text("Cover Instagram, Instagram Lite and YouTube during unfinished focus sessions, including pauses. These apps work normally after your session ends.",fontSize=12.sp,color=Sub)
                                                 }
-                                                Switch(checked=blockApps,onCheckedChange={
-                                                    blockApps=it;store.setBlockDistractingApps(it)
-                                                    if(it && !FocusAppBlocker.isEnabled(this@MainActivity))blockerSetup=true
-                                                    revision++
+                                                Switch(checked=blockApps,onCheckedChange={requested->
+                                                    if(!requested && blockApps && current.mode=="focus" &&
+                                                        SessionUninstallGuard.unfinished(current)){
+                                                        showBlockerLockedAlert=true
+                                                    }else if(store.setBlockDistractingApps(requested)){
+                                                        blockApps=requested
+                                                        if(requested && !FocusAppBlocker.isEnabled(this@MainActivity))blockerSetup=true
+                                                        revision++
+                                                    }else if(!requested)showBlockerLockedAlert=true
                                                 })
                                             }
+                                            if(blockApps && current.mode=="focus" && SessionUninstallGuard.unfinished(current))
+                                                Text("App blocking is locked until this focus session completes or is ended, even during pauses.",fontSize=11.sp,color=Rose)
                                             if(blockApps){
                                                 Text(if(FocusAppBlocker.isEnabled(this@MainActivity))
                                                     "Usage access and Display over other apps granted · focus blocking ready."
@@ -491,17 +504,17 @@ class MainActivity:ComponentActivity(){
                                                 Spacer(Modifier.height(8.dp))
                                                 HorizontalDivider(color=Border)
                                                 Spacer(Modifier.height(12.dp))
-                                                Text("Precise session alerts",fontWeight=FontWeight.Bold,color=Ink)
+                                                Text("Precise session and planner reminders",fontWeight=FontWeight.Bold,color=Ink)
                                                 Text(
                                                     if(FocusAlarms.preciseAllowed(this@MainActivity))
-                                                        "Enabled. Session completion uses exact Android alarms."
-                                                    else "Optional permission. Without it, Android may delay an end alert in battery saver.",
+                                                        "Enabled. Session completion and planner reminders use exact Android alarms."
+                                                    else "Grant exact-alarm permission for on-time planner reminders; otherwise Android may delay notifications.",
                                                     fontSize=12.sp,color=Sub)
                                                 if(!FocusAlarms.preciseAllowed(this@MainActivity)){
                                                     TextButton(onClick={
                                                         startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
                                                             Uri.parse("package:"+packageName)))
-                                                    }){Text("Allow precise session alerts")}
+                                                    }){Text("Allow precise reminders")}
                                                 }
                                             }
                                             HorizontalDivider(color=Border)
@@ -573,6 +586,13 @@ class MainActivity:ComponentActivity(){
             if(protectionError!=null)AlertDialog(onDismissRequest={protectionError=null},title={Text("Session protection")},text={Text(protectionError.orEmpty())},confirmButton={TextButton(onClick={protectionError=null}){Text("OK")}})
             if(cancellationError!=null)AlertDialog(onDismissRequest={cancellationError=null},title={Text("Session kept")},text={Text(cancellationError.orEmpty())},confirmButton={TextButton(onClick={cancellationError=null}){Text("OK")}})
             if(completion!=null)AlertDialog(onDismissRequest={store.dismissCompletion();completion=null},icon={Icon(Icons.Rounded.LocalFlorist,null,tint=Rose)},title={Text(if(mode=="focus")"A little more bloomed." else "Welcome back.")},text={Text(completion.orEmpty())},confirmButton={TextButton(onClick={store.dismissCompletion();completion=null;mode=if(mode=="focus")"break" else "focus";store.configure(if(mode=="break")5 else 25,mode=mode);revision++}){Text(if(mode=="focus")"Take a 5-minute break" else "Back to focus")}},dismissButton={TextButton(onClick={store.dismissCompletion();completion=null}){Text("Lovely")}})
+            if(showBlockerLockedAlert)AlertDialog(
+                onDismissRequest={showBlockerLockedAlert=false},
+                icon={Icon(Icons.Rounded.Lock,null,tint=Rose)},
+                title={Text("App blocking is locked")},
+                text={Text("Block Apps can't be turned off until your focus session ends. It stays on even if you pause. Finish the timer or use End session to unlock the switch.")},
+                confirmButton={TextButton(onClick={showBlockerLockedAlert=false}){Text("Got it")}}
+            )
             if(importError!=null)AlertDialog(onDismissRequest={importError=null},title={Text("Audio could not be added")},text={Text(importError.orEmpty())},confirmButton={TextButton(onClick={importError=null}){Text("OK")}})
             if(openSound)AlertDialog(onDismissRequest={openSound=false},title={Text("Your focus audio")},text={
                 Column(Modifier.heightIn(max=455.dp).verticalScroll(rememberScrollState())){
@@ -603,6 +623,9 @@ class MainActivity:ComponentActivity(){
                     if(old==null)store.addTask(title,date.toString(),time,duration,remind)
                     else store.replaceTask(old.copy(title=title,date=date.toString(),time=time,duration=duration,remind=remind))
                     selectedDate=date;revision++;adding=false;editTask=null
+                     if(remind && Build.VERSION.SDK_INT>=33 &&
+                         checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
+                         permission.launch(Manifest.permission.POST_NOTIFICATIONS)
                 },onDelete={item->store.deleteTask(item);revision++;editTask=null;adding=false})
             }
                 }
@@ -648,6 +671,16 @@ class MainActivity:ComponentActivity(){
             Text("Expected time · ${duration} min",fontSize=13.sp,color=Sub)
             Slider(value=duration.toFloat(),onValueChange={duration=(it/5).roundToInt()*5},valueRange=5f..180f)
             Row(verticalAlignment=Alignment.CenterVertically){Text("Remind me",modifier=Modifier.weight(1f));Switch(checked=remind,onCheckedChange={remind=it})}
+            if(remind && !FocusAlarms.preciseAllowed(context) && Build.VERSION.SDK_INT>=31){
+                Text("Allow Alarms & reminders for on-time delivery. Otherwise Android may delay alerts.",fontSize=11.sp,color=Rose)
+                TextButton(onClick={
+                    runCatching{context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                        Uri.parse("package:"+context.packageName)))}
+                }){Text("Allow on-time reminders")}
+            }
+            if(remind && Build.VERSION.SDK_INT>=33 &&
+                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
+                Text("Allow notification permission to see the reminder.",fontSize=11.sp,color=Rose)
             if(item!=null)TextButton(onClick={onDelete(item)}){Text("Delete task",color=Rose)}
         }
     },confirmButton={TextButton(enabled=title.isNotBlank(),onClick={onSave(title.trim(),date,time,duration,remind)}){Text("Save plan")}},dismissButton={TextButton(onClick=onDismiss){Text("Cancel")}})
