@@ -1,6 +1,5 @@
 package com.staycalm.focus
 
-import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.AppOpsManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
@@ -11,22 +10,17 @@ import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Process
-import android.os.SystemClock
 import android.provider.Settings
 import android.view.Gravity
 import android.view.WindowManager
-import android.view.accessibility.AccessibilityManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 
 /**
- * Focus blocking is opt-in. Usage Access and an application overlay provide a fallback.
- * The separately consented Accessibility service supplies immediate package-only window
- * changes, including returning to an already-open task through Android Recents.
- *
- * No window content, text, screen captures, gestures, or activity history is collected.
- * Package names are processed only in memory. Android system settings remain accessible.
+ * Optional, simple Instagram-only overlay. Strict Accessibility and Recents
+ * interception were removed. YouTube remains accessible during focus sessions.
+ * No screen content is read or stored, and all permissions are user-controlled.
  */
 object FocusAppBlocker {
     fun hasUsageAccess(context: Context): Boolean = runCatching {
@@ -37,175 +31,74 @@ object FocusAppBlocker {
 
     fun hasOverlayAccess(context: Context): Boolean = Settings.canDrawOverlays(context)
 
-    fun hasAccessibilityAccess(context: Context): Boolean = runCatching {
-        val name = FocusAccessibilityService::class.java.name
-        context.getSystemService(AccessibilityManager::class.java)
-            .getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
-            .any { it.resolveInfo.serviceInfo.packageName == context.packageName &&
-                it.resolveInfo.serviceInfo.name == name }
-    }.getOrDefault(false)
+    fun isEnabled(context: Context): Boolean = hasUsageAccess(context) && hasOverlayAccess(context)
 
-    // Every permission must be user granted before starting a NEW blocked session.
-    fun isEnabled(context: Context): Boolean =
-        hasUsageAccess(context) && hasOverlayAccess(context) && hasAccessibilityAccess(context)
-
-    // Existing sessions keep their usage/overlay fallback if Accessibility is revoked.
     fun keepAlive(context: Context, state: FocusState): Boolean =
         state.mode == "focus" && state.sessionId.isNotEmpty() &&
-            FocusStore(context).blockDistractingApps() &&
-            hasUsageAccess(context) && hasOverlayAccess(context)
+            FocusStore(context).blockDistractingApps() && isEnabled(context)
 
     fun usageAccessIntent(): Intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
 
     fun overlayAccessIntent(context: Context): Intent =
         Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + context.packageName))
-
-    fun accessibilityIntent(): Intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
 }
 
-/** Blocking applies ONLY to the three specifically chosen apps, never Android Settings. */
+/** YouTube is intentionally allowed. Instagram blocking is entirely optional. */
 internal object FocusBlockPolicy {
     private val blockedApps = mapOf(
         "com.instagram.android" to "Instagram",
-        "com.instagram.lite" to "Instagram Lite",
-        "com.google.android.youtube" to "YouTube"
+        "com.instagram.lite" to "Instagram Lite"
     )
 
     fun appName(packageName: String): String? = blockedApps[packageName]
-
-    // SystemUI/Recents are transient: a system window is not evidence the underlying
-    // blocked app stopped being visible. Do not take down the shield for these events.
-    fun isSystemTransition(packageName: String): Boolean =
-        packageName == "com.android.systemui" ||
-        packageName == "android" ||
-        packageName.contains("recents", ignoreCase = true)
-
-    fun isLauncher(packageName: String): Boolean =
-        packageName.contains("launcher", ignoreCase = true)
 
     fun shouldBlock(state: FocusState, enabled: Boolean, packageName: String): Boolean =
         enabled && state.mode == "focus" && state.sessionId.isNotEmpty() &&
             appName(packageName) != null
 }
 
-/** Foreground timer service owns the UI; Accessibility only reports app package names. */
+/**
+ * Standard Usage Access polling, without Accessibility or gesture interception.
+ * Android may temporarily hide ordinary overlays in the Recents system UI.
+ */
 internal class FocusAppWatcher(private val context: Context) {
     private val usage = context.getSystemService(UsageStatsManager::class.java)
     private val windows = context.getSystemService(WindowManager::class.java)
     private var foregroundPackage: String? = null
     private var lastScanWall = 0L
-    private var latestUsageEventWall = 0L
-    private var lastAccessibilityElapsed = 0L
-    private var pendingLauncher: String? = null
-    private var pendingLauncherSince = 0L
-    private var crossedRecents = false
     private var overlay: LinearLayout? = null
     private var shownApp: String? = null
 
-    private fun eligible(state: FocusState, enabled: Boolean): Boolean =
-        enabled && state.mode == "focus" && state.sessionId.isNotEmpty() &&
-            FocusAppBlocker.hasOverlayAccess(context)
-
-    /** Authoritative, instant event from the opt-in Accessibility service. */
-    fun onWindowChanged(packageName: String, state: FocusState, enabled: Boolean) {
-        if (!eligible(state, enabled)) {
-            hide()
-            return
-        }
-        if (FocusBlockPolicy.isSystemTransition(packageName)) {
-            crossedRecents = true
-            return
-        }
-        val now = SystemClock.elapsedRealtime()
-        lastAccessibilityElapsed = now
-        if (FocusBlockPolicy.isLauncher(packageName) &&
-            foregroundPackage?.let { FocusBlockPolicy.appName(it) } != null) {
-            // Launcher often also hosts Recents, so keep the shield until home is stable.
-            pendingLauncher = packageName
-            pendingLauncherSince = now
-            crossedRecents = true
-            return
-        }
-        pendingLauncher = null
-        if (crossedRecents && FocusBlockPolicy.appName(packageName) != null) {
-            // Re-attach an overlay hidden by the system during its Recents animation.
-            hide()
-        }
-        crossedRecents = false
-        foregroundPackage = packageName
-        render(state, enabled)
-    }
-
     fun tick(state: FocusState, enabled: Boolean) {
-        if (!eligible(state, enabled)) {
+        if (!enabled || !FocusAppBlocker.isEnabled(context) ||
+            state.mode != "focus" || state.sessionId.isEmpty()) {
             hide()
             foregroundPackage = null
             return
         }
-        val nowWall = System.currentTimeMillis()
-        val nowElapsed = SystemClock.elapsedRealtime()
-        val from = if (lastScanWall == 0L || lastScanWall > nowWall)
-            nowWall - 15_000L else lastScanWall - 1_000L
-        lastScanWall = nowWall
-        try {
-            val events = usage.queryEvents(from.coerceAtLeast(0L), nowWall)
+        val now = System.currentTimeMillis()
+        val from = if (lastScanWall == 0L || lastScanWall > now) now - 15_000L else lastScanWall - 1_000L
+        lastScanWall = now
+        runCatching {
+            val events = usage.queryEvents(from.coerceAtLeast(0L), now)
             val event = UsageEvents.Event()
-            var newestTime = latestUsageEventWall
-            var newestPackage: String? = null
+            var chosenTime = Long.MIN_VALUE
             while (events.hasNextEvent()) {
                 events.getNextEvent(event)
-                val pkg = event.packageName ?: continue
                 if ((event.eventType == UsageEvents.Event.ACTIVITY_RESUMED ||
                     event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND) &&
-                    event.timeStamp > newestTime && pkg != context.packageName &&
-                    !FocusBlockPolicy.isSystemTransition(pkg)) {
-                    newestTime = event.timeStamp
-                    newestPackage = pkg
+                    event.timeStamp >= chosenTime) {
+                    chosenTime = event.timeStamp
+                    foregroundPackage = event.packageName
                 }
             }
-            if (newestPackage != null) {
-                latestUsageEventWall = newestTime
-                // Accessibility events are more current than UsageStats around Recents.
-                if (!FocusAppBlocker.hasAccessibilityAccess(context) ||
-                    nowElapsed - lastAccessibilityElapsed > 2_000L) {
-                    val pkg = newestPackage
-                    if (FocusBlockPolicy.isLauncher(pkg) &&
-                        foregroundPackage?.let{ FocusBlockPolicy.appName(it) } != null) {
-                        // Do not expose the blocked task during a launcher/Recents swipe.
-                        // Wait for a stable launcher or a confirmed app window.
-                        pendingLauncher = pkg
-                        pendingLauncherSince = nowElapsed
-                        crossedRecents = true
-                    } else {
-                        pendingLauncher = null
-                        foregroundPackage = pkg
-                    }
-                }
-            }
-        } catch (_: SecurityException) {
-            // Keep the last blocked window covered if usage access is temporarily denied.
-        } catch (_: RuntimeException) {
-            // Retain the previous known state until the next event/poll.
         }
-        if (pendingLauncher != null &&
-            nowElapsed - pendingLauncherSince >= 1_500L &&
-            (!FocusAppBlocker.hasAccessibilityAccess(context) ||
-                nowElapsed - lastAccessibilityElapsed > 2_000L)) {
-            foregroundPackage = pendingLauncher
-            pendingLauncher = null
-            crossedRecents = false
-        }
-        render(state, enabled)
-    }
-
-    private fun render(state: FocusState, enabled: Boolean) {
-        val name = if(eligible(state, enabled))
-            foregroundPackage?.let{ FocusBlockPolicy.appName(it) } else null
+        val name = foregroundPackage?.let { FocusBlockPolicy.appName(it) }
         if (name == null) hide() else show(name)
     }
 
     private fun show(name: String) {
-        if (overlay != null && shownApp == name && overlay?.isAttachedToWindow == true) return
+        if (overlay != null && shownApp == name) return
         hide()
         val layout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -237,8 +130,6 @@ internal class FocusAppWatcher(private val context: Context) {
             text = "Open STAYCALM"
             setOnClickListener {
                 foregroundPackage = context.packageName
-                pendingLauncher = null
-                crossedRecents = false
                 hide()
                 runCatching {
                     context.startActivity(Intent(context, MainActivity::class.java).apply {
