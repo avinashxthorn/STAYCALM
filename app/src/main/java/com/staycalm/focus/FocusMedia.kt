@@ -190,6 +190,8 @@ internal fun FocusMediaHub(focusMode: Boolean, sessionActive: Boolean) {
             }
             Text("Watch YouTube inside STAYCALM without unblocking the YouTube app. The focus timer keeps running.",
                 fontSize = 12.sp, color = mutedInk)
+            Text("When you load a video, the official YouTube player connects to YouTube and may share playback/device data. It does not access your local planner.",
+                fontSize = 11.sp, color = mutedInk)
             OutlinedTextField(
                 value = youtubeText,
                 onValueChange = { youtubeText = it.take(400) },
