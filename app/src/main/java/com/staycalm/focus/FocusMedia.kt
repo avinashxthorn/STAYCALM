@@ -2,7 +2,8 @@ package com.staycalm.focus
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
+import android.webkit.WebResourceRequest
+import java.net.URI
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -36,32 +37,35 @@ import java.lang.ref.WeakReference
  * extract, split, hide or background-play YouTube audiovisual media.
  */
 internal object StudyMediaLinks {
+    /** Standard shared YouTube links only. Reject fake domains and non-video pages. */
     fun youtubeId(input: String): String? {
-        val raw = input.trim()
-        val uri = runCatching { Uri.parse(raw) }.getOrNull() ?: return null
-        if (uri.scheme != "https") return null
+        val uri = runCatching { URI(input.trim()) }.getOrNull() ?: return null
+        if (!uri.scheme.equals("https", ignoreCase = true) || uri.userInfo != null) return null
         val host = uri.host?.lowercase()?.removePrefix("www.") ?: return null
-        val segments = uri.pathSegments
+        val parts = uri.path.orEmpty().split('/').filter { it.isNotEmpty() }
         val id = when (host) {
-            "youtu.be" -> segments.firstOrNull()
+            "youtu.be" -> parts.firstOrNull()
             "youtube.com", "m.youtube.com", "music.youtube.com", "youtube-nocookie.com" ->
-                if (segments.firstOrNull() == "watch") uri.getQueryParameter("v")
-                else if (segments.firstOrNull() in listOf("shorts", "live", "embed"))
-                    segments.getOrNull(1)
-                else null
+                when (parts.firstOrNull()) {
+                    "watch" -> uri.rawQuery.orEmpty().split('&')
+                        .firstOrNull { it.startsWith("v=") }?.removePrefix("v=")
+                    "shorts", "live", "embed" -> parts.getOrNull(1)
+                    else -> null
+                }
             else -> null
         }
         return id?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{11}")) }
     }
 
-    fun secureAudioUrl(text: String): String? = runCatching {
-        val uri = Uri.parse(text.trim())
-        if (uri.scheme == "https" && !uri.host.isNullOrBlank() &&
-            !uri.userInfoCompat() && uri.host !in listOf("localhost", "127.0.0.1"))
-            uri.toString() else null
-    }.getOrNull()
-
-    private fun Uri.userInfoCompat(): Boolean = encodedAuthority?.contains("@") == true
+    /** HTTPS RSS/audio streams only; no extracted YouTube URLs. */
+    fun secureAudioUrl(input: String): String? {
+        val uri = runCatching { URI(input.trim()) }.getOrNull() ?: return null
+        if (!uri.scheme.equals("https", ignoreCase = true) ||
+            uri.host.isNullOrBlank() || uri.userInfo != null ||
+            uri.host.equals("localhost", true) || uri.host == "127.0.0.1")
+            return null
+        return uri.toASCIIString()
+    }
 }
 
 internal data class PodcastEpisode(val title: String, val audioUrl: String)
@@ -146,6 +150,7 @@ internal object StudyVideoVisibility {
         if (active?.get() === web) { active = null; restore = null }
         web.stopLoading()
         web.loadUrl("about:blank")
+        (web.parent as? ViewGroup)?.removeView(web)
         web.destroy()
     }
 }
@@ -212,7 +217,23 @@ internal fun FocusMediaHub(focusMode: Boolean, sessionActive: Boolean) {
                             settings.domStorageEnabled = true
                             settings.mediaPlaybackRequiresUserGesture = true
                             webChromeClient = WebChromeClient()
-                            webViewClient = WebViewClient()
+                            webViewClient = object : WebViewClient() {
+                                // The embedded player may navigate its subframes freely.
+                                // Keep the top-level STAYCALM view from becoming an
+                                // unrestricted browser that bypasses the YouTube blocker.
+                                override fun shouldOverrideUrlLoading(
+                                    view: WebView, request: WebResourceRequest
+                                ): Boolean {
+                                    if (!request.isForMainFrame) return false
+                                    val uri = request.url
+                                    return !(uri.scheme == "https" &&
+                                        (uri.host == "com.staycalm.focus" ||
+                                            uri.host == "www.youtube.com" &&
+                                            uri.path.orEmpty().startsWith("/embed/")))
+                                }
+                            }
+                            settings.allowFileAccess = false
+                            settings.allowContentAccess = false
                             setBackgroundColor(android.graphics.Color.BLACK)
                             layoutParams = ViewGroup.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
