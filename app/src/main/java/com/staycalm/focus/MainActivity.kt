@@ -449,7 +449,7 @@ class MainActivity:ComponentActivity(){
                                             Spacer(Modifier.height(12.dp))
                                             Row(verticalAlignment=Alignment.CenterVertically){
                                                 Column(Modifier.weight(1f)){
-                                                    Text("Block distracting apps",fontWeight=FontWeight.Bold)
+                                                    Text("Block Instagram (optional)",fontWeight=FontWeight.Bold)
                                                     Text("Optionally cover Instagram and Instagram Lite during unfinished focus sessions, including pauses. YouTube stays available, including videos during focus.",fontSize=12.sp,color=Sub)
                                                 }
                                                 Switch(checked=blockApps,onCheckedChange={requested->
@@ -470,7 +470,7 @@ class MainActivity:ComponentActivity(){
                                                     "Usage access and Display over other apps granted · optional Instagram blocking ready."
                                                     else "Setup required for optional Instagram blocking: grant Usage access and Display over other apps.",
                                                     color=if(FocusAppBlocker.isEnabled(this@MainActivity))Sub else Rose,fontSize=11.sp)
-                                                TextButton(onClick={blockerSetup=true}){Text("Set up app blocking")}
+                                                TextButton(onClick={blockerSetup=true}){Text("Set up Instagram blocking")}
                                             }
                                             Text("Optional basic Instagram blocking uses on-device Usage access and app overlays only. No strict Recent-apps or Accessibility protection. YouTube videos remain available during focus.",fontSize=11.sp,color=Sub)
                                             HorizontalDivider(color=Border)
@@ -569,7 +569,7 @@ class MainActivity:ComponentActivity(){
                 }){Text("End session")}},dismissButton={TextButton(onClick={showReset=false}){Text("Keep going")}})
             }
             if(blockerSetup)AlertDialog(onDismissRequest={blockerSetup=false},
-                title={Text("Set up focus app blocking")},
+                title={Text("Optional Instagram blocking")},
                 text={
                     Column(verticalArrangement=Arrangement.spacedBy(10.dp)){
                         Text("Optional basic blocking covers Instagram and Instagram Lite during unfinished focus sessions. YouTube remains available. It uses Usage access and Display over other apps only; no Accessibility service or strict Recents interception.",fontSize=13.sp)
