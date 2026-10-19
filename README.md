@@ -8,7 +8,9 @@ A native Android focus companion in a cohesive pink theme. Kotlin, Jetpack Compo
 - Separate short-break mode with 5/10/15-minute presets. Breaks do not count toward focus progress.
 - Pause/resume, persisted sessions, completion summary, and confirmation before abandoning a session.
 - Session intentions, recent history, daily goal progress, seven-day chart, and consecutive-day streak.
-- Monthly planner with task editing, completion, reminders, and one-tap focus on a task.
+- Monthly planner with task editing, completion, exact-time reminders (when Android permits), and one-tap focus on a task.
+- The Focus screen's "What deserves your attention?" field automatically saves one updatable entry into today's Planner.
+- App blocking cannot be turned off while a focus session is running or paused: a dialog explains why the toggle stays on.
 - Six-stage pink turtle companion, earned through completed focus time.
 - Four supplied offline tracks, personal audio imports, seeking, volume, previous/next, and lock-screen playback controls. Every track loops automatically and stops when the session completes or is ended.
 - Optional Do Not Disturb and precise session alerts, subject to Android permissions.
@@ -33,7 +35,7 @@ gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 gradle :app:connectedDebugAndroidTest
 ```
 
-The APK is `app/build/outputs/apk/debug/app-debug.apk`. Android can delay notifications without precise-alarm permission; manufacturers may additionally restrict background execution. The timer reconciles its deadline on reopening.
+The APK is `app/build/outputs/apk/debug/app-debug.apk`. Planner reminders use exact Android alarms when permitted; on Android 12+ enable Alarms & reminders, and on Android 13+ enable app notifications. If exact alarms are not permitted, the fallback can be delayed. Existing reminders are re-armed after a restart, update, clock/time-zone change or granting precise-alarm access; device battery policies may still interfere. The timer reconciles its deadline on reopening.
 
 See `DESIGN-SYSTEM.md`, `ASSET-LICENSES.md`, and `QA-CHECKLIST.md`.
 
