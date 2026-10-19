@@ -46,3 +46,14 @@ No finite set of checks can guarantee an app has no defects on every Android dev
 - Type a focus-page intention and check that exactly one entry appears on today's planner date, updates while editing, and survives reopening.
 - Start focus with Block Apps enabled, then try switching it off; verify a modal alert appears, the switch remains On, and blocking continues through pause/resume.
 - Complete or allowably end the session and verify the switch can then be turned Off.
+
+## v3.7.3 Recents gesture bypass checks
+
+- Before a blocked focus session, explicitly opt in to the separate Accessibility foreground-window detection disclosure. Verify denying consent does not open Android Settings or start a protected focus session.
+- Enable all three settings (Usage Access, Display over other apps, Accessibility service). Start focus and open Instagram, Instagram Lite, and YouTube from the home screen. Confirm each shows the shield.
+- While shielded, swipe into Recents and immediately swipe back down to the blocked app; repeat at different speeds 10+ times and verify its content cannot be interacted with after the transition settles.
+- Switch from the blocked app to launcher and back, then from a nonblocked app back into a blocked app. Ensure the shield is recreated on return.
+- Pause focus and repeat Recents navigation; blocking remains until natural completion or allowed End session. Test that the settings switch still rejects an Off attempt.
+- Use the shield's Open STAYCALM button; confirm the app opens without trapping the user under its own overlay.
+- Disable Accessibility access mid-session using Android Settings and confirm this remains possible; Usage Access/overlay continue as a best-effort fallback and Settings is never blocked.
+- Confirm no network use, screen-content reads, screenshots or recorded browsing history. Document OEM-specific behavior and never claim system-level lockdown.
