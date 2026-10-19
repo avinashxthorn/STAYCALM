@@ -77,3 +77,14 @@ No finite set of checks can guarantee an app has no defects on every Android dev
 - Compare SHA-256 with the STAYCALM.apk.sha256 release asset to detect incomplete/mobile-browser downloads.
 - Try a clean installation on Android 15. For upgrades from earlier debug builds, test signing-certificate mismatch reporting and avoid deleting user data without backup.
 - Confirm Release publication uses GITHUB_TOKEN content write permission and that a denied Release publish does not suppress the direct Actions APK.
+
+## v3.7.7 In-app mini YouTube search QA
+
+- From Focus, open Watch & Listen and tap Open mini YouTube. Confirm the mini browser displays YouTube's official mobile page without asking for a developer key or a pasted video URL.
+- Search in the native search box for a lecture or podcast, press keyboard Search or the search icon. Verify correctly encoded YouTube search results URL and selection of a search result in the mini browser.
+- Verify YouTube's own video player, ads, links, subtitles and controls remain unmodified. External links use normal Android handlers rather than an unrestricted STAYCALM webview.
+- During a focus session, let a video play and verify timer continues counting. Test with optional Instagram-only blocking ON and OFF; YouTube should be accessible.
+- Leave STAYCALM, lock the screen or dismiss the dialog; video/audio must stop and cannot be played invisibly. Returning starts from YouTube home/search, not playing a hidden YouTube video.
+- Open mini browser while a pasted video is playing; the old embed must be removed so two videos never play concurrently.
+- Verify HTTP URLs, spoofed youtube.com hosts, data/file schemes cannot navigate within the mini browser.
+- Test poor connectivity, WebView blocked content, sign-in limitations, and video embed restrictions on the target Android phone. Android installation of the debug APK can fail over older builds with different signing keys.
