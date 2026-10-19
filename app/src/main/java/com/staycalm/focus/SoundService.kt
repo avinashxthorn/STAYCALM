@@ -204,8 +204,10 @@ class SoundService:Service(){
         builder.addAction(Notification.Action.Builder(if(state.playing)android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,if(state.playing)"Pause" else "Play",action(if(state.playing)"pause" else "play")).build())
         if(!isPodcast)builder.addAction(Notification.Action.Builder(android.R.drawable.ic_media_next,"Next",action("next")).build())
         builder.addAction(Notification.Action.Builder(android.R.drawable.ic_menu_close_clear_cancel,"Stop",action("stop")).build())
-        return builder.setStyle(Notification.MediaStyle().setMediaSession(session.sessionToken)
-            .setShowActionsInCompactView(if(isPodcast)0 else 0,if(isPodcast)1 else 1,if(isPodcast)1 else 2)).build()
+        val mediaStyle=Notification.MediaStyle().setMediaSession(session.sessionToken)
+        if(isPodcast)mediaStyle.setShowActionsInCompactView(0,1)
+        else mediaStyle.setShowActionsInCompactView(0,1,2)
+        return builder.setStyle(mediaStyle).build()
     }
     private fun updateNotification(){
         session.setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE,podcastTitle?:track?.label?:"Focus music").putString(MediaMetadata.METADATA_KEY_ARTIST,"STAYCALM").putLong(MediaMetadata.METADATA_KEY_DURATION,AudioPlayback.state.duration).build())
