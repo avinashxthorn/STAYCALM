@@ -111,8 +111,7 @@ internal class FocusAppWatcher(private val context: Context) {
             hide()
             return
         }
-        if (packageName == context.packageName ||
-            FocusBlockPolicy.isSystemTransition(packageName)) return
+        if (FocusBlockPolicy.isSystemTransition(packageName)) return
 
         lastAccessibilityElapsed = SystemClock.elapsedRealtime()
         pendingLauncher = null
@@ -220,6 +219,8 @@ internal class FocusAppWatcher(private val context: Context) {
         val button = Button(context).apply {
             text = "Open STAYCALM"
             setOnClickListener {
+                foregroundPackage = context.packageName
+                pendingLauncher = null
                 hide()
                 runCatching {
                     context.startActivity(Intent(context, MainActivity::class.java).apply {
