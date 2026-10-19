@@ -57,3 +57,16 @@ No finite set of checks can guarantee an app has no defects on every Android dev
 - Use the shield's Open STAYCALM button; confirm the app opens without trapping the user under its own overlay.
 - Disable Accessibility access mid-session using Android Settings and confirm this remains possible; Usage Access/overlay continue as a best-effort fallback and Settings is never blocked.
 - Confirm no network use, screen-content reads, screenshots or recorded browsing history. Document OEM-specific behavior and never claim system-level lockdown.
+
+
+## v3.7.4 Watch & Listen QA
+
+- Paste `https://www.youtube.com/watch?v=M7lc1UVf-VE` during active focus; verify the official player is visible and the countdown continues. Check Shorts and youtu.be video URLs; reject fake domains, playlists and non-HTTPS links.
+- Try a YouTube video that disallows embedding and confirm this is handled by the embedded YouTube player (STAYCALM does not download or bypass it).
+- Switch to Planner/Settings, background the app and lock the screen; confirm the embedded YouTube player does **not** continue in the background, and reload on returning to Focus requires an explicit Play tap.
+- With the focus blocker active, try the recent-apps swipe trick; the embedded player does not whitelist the external YouTube app, which remains blocked.
+- Paste a public HTTPS audio RSS feed, retrieve episodes, choose one; verify background audio, media notification, headphone controls, pause/resume/stop and seek.
+- End or complete an active focus session; verify the podcast media service stops promptly and notification is removed.
+- Confirm local/imported ambient audio still loads, loops and plays; changing ambient audio stops previous podcast stream.
+- Test airplane mode, malformed podcast URLs, HTTPS failures, RSS feeds without enclosures, autoplay restrictions and Android 15 media playback permissions.
+- Verify Android manifest declares INTERNET but no new account, device-storage or broad media permissions; note podcast RSS URLs shared with their publishers and YouTube requests shared with YouTube.
