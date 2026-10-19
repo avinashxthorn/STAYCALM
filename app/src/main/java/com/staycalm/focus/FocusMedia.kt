@@ -161,6 +161,7 @@ internal fun FocusMediaHub(focusMode: Boolean, sessionActive: Boolean) {
     val prefs = remember { context.getSharedPreferences("study_media", Context.MODE_PRIVATE) }
     var youtubeText by remember { mutableStateOf(prefs.getString("youtube_link", "").orEmpty()) }
     var playingId by remember { mutableStateOf<String?>(null) }
+    var showMiniYouTube by remember { mutableStateOf(false) }
     var videoError by remember { mutableStateOf<String?>(null) }
     var feedText by remember { mutableStateOf(prefs.getString("rss_link", "").orEmpty()) }
     var episodes by remember { mutableStateOf<List<PodcastEpisode>>(emptyList()) }
@@ -188,8 +189,18 @@ internal fun FocusMediaHub(focusMode: Boolean, sessionActive: Boolean) {
                     Text("Study videos and background podcasts", fontWeight = FontWeight.Bold, color = plumInk)
                 }
             }
-            Text("Watch YouTube inside STAYCALM without unblocking the YouTube app. The focus timer keeps running.",
+            Text("Search YouTube and watch videos without leaving the Focus timer. No link needed.",
                 fontSize = 12.sp, color = mutedInk)
+            Button(onClick = {
+                // Never leave an embedded YouTube video playing behind the mini browser.
+                playingId = null
+                showMiniYouTube = true
+            }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Rounded.Search, null)
+                Spacer(Modifier.width(9.dp))
+                Text("Open mini YouTube · Search & Watch")
+            }
+            Text("Or paste a specific video link below:", fontSize = 12.sp, color = mutedInk)
             Text("When you load a video, the official YouTube player connects to YouTube and may share playback/device data. It does not access your local planner.",
                 fontSize = 11.sp, color = mutedInk)
             OutlinedTextField(
@@ -312,4 +323,5 @@ internal fun FocusMediaHub(focusMode: Boolean, sessionActive: Boolean) {
                     fontSize = 11.sp, color = mutedInk)
         }
     }
+    if (showMiniYouTube) MiniYouTubeBrowser(onDismiss = { showMiniYouTube = false })
 }
