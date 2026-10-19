@@ -137,7 +137,6 @@ class MainActivity:ComponentActivity(){
             var uninstallProtection by remember{mutableStateOf(store.uninstallProtectionEnabled())}
             var blockApps by remember{mutableStateOf(store.blockDistractingApps())}
             var blockerSetup by remember{mutableStateOf(false)}
-            var blockerConsent by remember{mutableStateOf(false)}
             var showBlockerLockedAlert by remember{mutableStateOf(false)}
             var protectionError by remember{mutableStateOf<String?>(null)}
             var pendingProtectedStart by rememberSaveable{mutableStateOf(false)}
@@ -271,8 +270,8 @@ class MainActivity:ComponentActivity(){
                                     FocusMediaHub(focusMode=current.mode=="focus",sessionActive=current.sessionId.isNotEmpty())
                                     if(blockApps && current.mode=="focus" && SessionUninstallGuard.unfinished(current)){
                                         Text(if(FocusAppBlocker.isEnabled(this@MainActivity))
-                                            "Instagram, Instagram Lite and YouTube are blocked until this focus session ends."
-                                            else "App blocking needs Usage access, overlay access and consented window detection. Open Settings to restore protection.",fontSize=12.sp,color=Rose)
+                                            "Instagram and Instagram Lite are covered until this focus session ends. YouTube stays available."
+                                            else "Optional Instagram blocking needs Usage access and Display over other apps.",fontSize=12.sp,color=Rose)
                                     }
                                     if(uninstallProtection && SessionUninstallGuard.unfinished(current)){
                                         Text(if(SessionUninstallGuard.active(this@MainActivity))
@@ -451,7 +450,7 @@ class MainActivity:ComponentActivity(){
                                             Row(verticalAlignment=Alignment.CenterVertically){
                                                 Column(Modifier.weight(1f)){
                                                     Text("Block distracting apps",fontWeight=FontWeight.Bold)
-                                                    Text("Cover Instagram, Instagram Lite and YouTube during unfinished focus sessions, including pauses. These apps work normally after your session ends.",fontSize=12.sp,color=Sub)
+                                                    Text("Optionally cover Instagram and Instagram Lite during unfinished focus sessions, including pauses. YouTube stays available, including videos during focus.",fontSize=12.sp,color=Sub)
                                                 }
                                                 Switch(checked=blockApps,onCheckedChange={requested->
                                                     if(!requested && blockApps && current.mode=="focus" &&
@@ -468,12 +467,12 @@ class MainActivity:ComponentActivity(){
                                                 Text("App blocking is locked until this focus session completes or is ended, even during pauses.",fontSize=11.sp,color=Rose)
                                             if(blockApps){
                                                 Text(if(FocusAppBlocker.isEnabled(this@MainActivity))
-                                                    "Usage access, Display over apps and Accessibility window detection granted · focus blocking ready."
-                                                    else "Setup required: grant all three Android permissions before starting a protected focus session.",
+                                                    "Usage access and Display over other apps granted · optional Instagram blocking ready."
+                                                    else "Setup required for optional Instagram blocking: grant Usage access and Display over other apps.",
                                                     color=if(FocusAppBlocker.isEnabled(this@MainActivity))Sub else Rose,fontSize=11.sp)
                                                 TextButton(onClick={blockerSetup=true}){Text("Set up app blocking")}
                                             }
-                                            Text("Protected focus uses on-device app usage and, with separate consent, Accessibility window changes to detect returning from Recents. No screen content, text, or gestures are read. Android Settings can revoke access anytime.",fontSize=11.sp,color=Sub)
+                                            Text("Optional basic Instagram blocking uses on-device Usage access and app overlays only. No strict Recent-apps or Accessibility protection. YouTube videos remain available during focus.",fontSize=11.sp,color=Sub)
                                             HorizontalDivider(color=Border)
                                             Spacer(Modifier.height(12.dp))
                                             Row(verticalAlignment=Alignment.CenterVertically){
@@ -573,7 +572,7 @@ class MainActivity:ComponentActivity(){
                 title={Text("Set up focus app blocking")},
                 text={
                     Column(verticalArrangement=Arrangement.spacedBy(10.dp)){
-                        Text("Strong blocking requires three permissions to identify the visible app and cover Instagram, Instagram Lite and YouTube during unfinished focus sessions, including switching from Recents. All detection stays on this phone. No screen content or text is collected.",fontSize=13.sp)
+                        Text("Optional basic blocking covers Instagram and Instagram Lite during unfinished focus sessions. YouTube remains available. It uses Usage access and Display over other apps only; no Accessibility service or strict Recents interception.",fontSize=13.sp)
                         Text(if(FocusAppBlocker.hasUsageAccess(this@MainActivity))
                             "✓ Usage access allowed" else "1. Grant Usage access",fontWeight=FontWeight.SemiBold)
                         if(!FocusAppBlocker.hasUsageAccess(this@MainActivity))
@@ -582,33 +581,11 @@ class MainActivity:ComponentActivity(){
                             "✓ Display over other apps allowed" else "2. Allow Display over other apps",fontWeight=FontWeight.SemiBold)
                         if(!FocusAppBlocker.hasOverlayAccess(this@MainActivity))
                             TextButton(onClick={startActivity(FocusAppBlocker.overlayAccessIntent(this@MainActivity))}){Text("Open Display over other apps settings")}
-                        Text(if(FocusAppBlocker.hasAccessibilityAccess(this@MainActivity))
-                            "✓ Accessibility window detection allowed" else "3. Enable STAYCALM window detection",fontWeight=FontWeight.SemiBold)
-                        if(!FocusAppBlocker.hasAccessibilityAccess(this@MainActivity))
-                            TextButton(onClick={blockerSetup=false;blockerConsent=true}){
-                                Text("Review Accessibility use and consent")
-                            }
-                        Text("After allowing all three permissions, return to STAYCALM. You can revoke permissions in Android Settings; protected focus cannot guarantee blocking after access is revoked.",fontSize=12.sp,color=Sub)
+                        Text("After granting these two optional permissions, return to STAYCALM. You can revoke either through Android Settings.",fontSize=12.sp,color=Sub)
                     }
                 },
                 confirmButton={TextButton(onClick={blockerSetup=false;revision++}){Text("Done")}},
                 dismissButton={TextButton(onClick={blockerSetup=false}){Text("Not now")}})
-            if(blockerConsent)AlertDialog(
-                onDismissRequest={blockerConsent=false},
-                title={Text("Allow app-window detection?")},
-                text={
-                    Column(verticalArrangement=Arrangement.spacedBy(9.dp)){
-                        Text("To prevent the recent-apps swipe bypass, STAYCALM requests an optional Accessibility service that reports which app window is on screen. It only checks the app package name to cover Instagram, Instagram Lite and YouTube during unfinished focus sessions.")
-                        Text("STAYCALM does NOT request access to window contents and does not read text, passwords, messages, taps, screenshots or gestures. No app names or activity are saved or shared. Other apps and Android Settings remain available.")
-                        Text("Android controls this permission. You can revoke it in Accessibility Settings at any time; without it, new sessions cannot begin with Block Apps enabled.",fontSize=12.sp,color=Sub)
-                    }
-                },
-                confirmButton={TextButton(onClick={
-                    blockerConsent=false
-                    startActivity(FocusAppBlocker.accessibilityIntent())
-                }){Text("I agree · open Settings")}},
-                dismissButton={TextButton(onClick={blockerConsent=false}){Text("Not now")}}
-            )
             if(protectionError!=null)AlertDialog(onDismissRequest={protectionError=null},title={Text("Session protection")},text={Text(protectionError.orEmpty())},confirmButton={TextButton(onClick={protectionError=null}){Text("OK")}})
             if(cancellationError!=null)AlertDialog(onDismissRequest={cancellationError=null},title={Text("Session kept")},text={Text(cancellationError.orEmpty())},confirmButton={TextButton(onClick={cancellationError=null}){Text("OK")}})
             if(completion!=null)AlertDialog(onDismissRequest={store.dismissCompletion();completion=null},icon={Icon(Icons.Rounded.LocalFlorist,null,tint=Rose)},title={Text(if(mode=="focus")"A little more bloomed." else "Welcome back.")},text={Text(completion.orEmpty())},confirmButton={TextButton(onClick={store.dismissCompletion();completion=null;mode=if(mode=="focus")"break" else "focus";store.configure(if(mode=="break")5 else 25,mode=mode);revision++}){Text(if(mode=="focus")"Take a 5-minute break" else "Back to focus")}},dismissButton={TextButton(onClick={store.dismissCompletion();completion=null}){Text("Lovely")}})
