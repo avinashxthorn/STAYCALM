@@ -98,6 +98,7 @@ internal class FocusAppWatcher(private val context: Context) {
     private var lastAccessibilityElapsed = 0L
     private var pendingLauncher: String? = null
     private var pendingLauncherSince = 0L
+    private var crossedRecents = false
     private var overlay: LinearLayout? = null
     private var shownApp: String? = null
 
@@ -111,12 +112,26 @@ internal class FocusAppWatcher(private val context: Context) {
             hide()
             return
         }
-        if (FocusBlockPolicy.isSystemTransition(packageName)) return
-
-        lastAccessibilityElapsed = SystemClock.elapsedRealtime()
+        if (FocusBlockPolicy.isSystemTransition(packageName)) {
+            crossedRecents = true
+            return
+        }
+        val now = SystemClock.elapsedRealtime()
+        lastAccessibilityElapsed = now
+        if (FocusBlockPolicy.isLauncher(packageName) &&
+            foregroundPackage?.let { FocusBlockPolicy.appName(it) } != null) {
+            // Launcher often also hosts Recents, so keep the shield until home is stable.
+            pendingLauncher = packageName
+            pendingLauncherSince = now
+            crossedRecents = true
+            return
+        }
         pendingLauncher = null
-        // A confirmed safe app, including Settings or STAYCALM's own Activity,
-        // removes the cover. Recents and SystemUI events above never do.
+        if (crossedRecents && FocusBlockPolicy.appName(packageName) != null) {
+            // Re-attach an overlay hidden by the system during its Recents animation.
+            hide()
+        }
+        crossedRecents = false
         foregroundPackage = packageName
         render(state, enabled)
     }
@@ -160,6 +175,7 @@ internal class FocusAppWatcher(private val context: Context) {
                         // Wait for a stable launcher or a confirmed app window.
                         pendingLauncher = pkg
                         pendingLauncherSince = nowElapsed
+                        crossedRecents = true
                     } else {
                         pendingLauncher = null
                         foregroundPackage = pkg
@@ -177,6 +193,7 @@ internal class FocusAppWatcher(private val context: Context) {
                 nowElapsed - lastAccessibilityElapsed > 2_000L)) {
             foregroundPackage = pendingLauncher
             pendingLauncher = null
+            crossedRecents = false
         }
         render(state, enabled)
     }
@@ -221,6 +238,7 @@ internal class FocusAppWatcher(private val context: Context) {
             setOnClickListener {
                 foregroundPackage = context.packageName
                 pendingLauncher = null
+                crossedRecents = false
                 hide()
                 runCatching {
                     context.startActivity(Intent(context, MainActivity::class.java).apply {
