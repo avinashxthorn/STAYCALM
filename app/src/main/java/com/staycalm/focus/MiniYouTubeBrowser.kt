@@ -1,8 +1,8 @@
 package com.staycalm.focus
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Color
-import android.net.Uri
 import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -85,9 +85,16 @@ internal fun MiniYouTubeBrowser(onDismiss: () -> Unit) {
                     if (!request.isForMainFrame) return false
                     val url = request.url.toString()
                     if (MiniYouTubeNavigation.isYouTubeDestination(url)) return false
-                    // Do not open an unrestricted web browser inside focus mode.
-                    // The user can still use their regular browser for external links.
-                    error = "This link opens outside YouTube. Use your browser if needed."
+                    // Keep YouTube navigation in the mini browser but honor links
+                    // to other sites by offering the normal Android handler.
+                    // The YouTube page/player is never modified or obscured.
+                    runCatching {
+                        if (request.url.scheme == "https") {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, request.url))
+                        } else {
+                            error = "This link cannot be opened safely."
+                        }
+                    }.onFailure { error = "Android could not open this link." }
                     return true
                 }
 
