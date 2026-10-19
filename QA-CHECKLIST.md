@@ -68,3 +68,12 @@ No finite set of checks can guarantee an app has no defects on every Android dev
 - Confirm local/imported ambient audio still loads, loops and plays; changing ambient audio stops previous podcast stream.
 - Test airplane mode, malformed podcast URLs, HTTPS failures, RSS feeds without enclosures, autoplay restrictions and Android 15 media playback permissions.
 - Verify Android manifest declares INTERNET but no new account, device-storage or broad media permissions; note podcast RSS URLs shared with their publishers and YouTube requests shared with YouTube.
+
+## v3.7.6 APK download and Android install validation
+
+- In CI, run unit tests, lint and assemble; verify app-debug.apk is nonempty, passes ZIP integrity and apksigner checks, and has application ID com.staycalm.focus.
+- Download STAYCALM.apk from GitHub Releases under Assets, not Source code (zip) or an HTML page. It should open in Android's APK installer without extraction.
+- Download the unarchived STAYCALM.apk from the latest green GitHub Actions run (upload-artifact@v7 archive:false). Check that the extension remains .apk and no ZIP extractor is used.
+- Compare SHA-256 with the STAYCALM.apk.sha256 release asset to detect incomplete/mobile-browser downloads.
+- Try a clean installation on Android 15. For upgrades from earlier debug builds, test signing-certificate mismatch reporting and avoid deleting user data without backup.
+- Confirm Release publication uses GITHUB_TOKEN content write permission and that a denied Release publish does not suppress the direct Actions APK.
