@@ -16,13 +16,16 @@ A native Android focus companion in a cohesive pink theme. Kotlin, Jetpack Compo
 - Optional Do Not Disturb and precise session alerts, subject to Android permissions.
 - Local-only storage, no accounts or analytics. Optional embedded YouTube and HTTPS podcast playback require internet; video playback connects to YouTube, RSS podcast feeds connect to their publishers.
 
-## Build and download
+## Build and download (v3.7.6)
 
-Pushes to `main` run `.github/workflows/android-apk.yml`. The workflow downloads licensed offline assets, runs JVM tests and Android lint, builds an installable debug APK, then exercises session and planner flows on an Android 15 emulator.
+**Mobile-friendly download:** After the latest GitHub Actions build succeeds, open [STAYCALM Releases](https://github.com/avinashxthorn/STAYCALM/releases/latest), expand **Assets**, and download **STAYCALM.apk**. This is a real, installable APK, **not** a ZIP file. Do not choose **Source code (zip)** or **Source code (tar.gz)**.
 
-In the successful Actions run, download **STAYCALM-v3.7.5-youtube-focus-debug-apk**, extract the ZIP, and install `app-debug.apk`. The **STAYCALM-verification** artifact contains check reports and emulator screenshots.
+- The latest release's direct APK URL (once published) is [STAYCALM.apk](https://github.com/avinashxthorn/STAYCALM/releases/latest/download/STAYCALM.apk).
+- **Alternative:** Open the latest successful [GitHub Actions run](https://github.com/avinashxthorn/STAYCALM/actions) and select **STAYCALM.apk** in its Artifacts section. The workflow uses `actions/upload-artifact@v7` with `archive: false`, which downloads this one APK **without** a ZIP/extraction step.
+- Before publishing, CI runs unit tests and Android lint, compiles the app, checks the APK ZIP's internal integrity, verifies its Android signature with `apksigner`, verifies its application ID with `aapt`, and generates `STAYCALM.apk.sha256` for checking download integrity. An Android 15 emulator UI test also runs separately. No physical-device install is guaranteed by these checks.
+- If the APK fails to install over an older STAYCALM, Android may be rejecting a **signing certificate mismatch**: debug builds produced by separate GitHub runners can use different temporary debug signing keys. An unchanged package ID requires the same signing certificate to update in place. **Do not uninstall the previous app without saving important planner and focus data**; uninstalling removes local records. A permanent fix requires configuring a securely held stable signing key.
 
-This is a debug-signed build, not a Play Store release. CI-generated debug signing keys may differ between runs; an update can require removing the previously installed debug app, which erases its local data. Production distribution needs a stable private signing key.
+The checked APK lives at `app/build/outputs/apk/debug/app-debug.apk` during CI; it is copied unchanged to `dist/STAYCALM.apk` for the direct download.
 
 ### Local build
 
