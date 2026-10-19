@@ -10,7 +10,7 @@ jobs:
   android:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
@@ -30,11 +30,45 @@ jobs:
         run: gradle --no-daemon :app:testDebugUnitTest :app:lintDebug --stacktrace --console=plain
       - name: Assemble debug APK
         run: gradle --no-daemon :app:assembleDebug
+      - name: Verify APK integrity, package and Android signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          unzip -t "$APK" >/dev/null
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.staycalm.focus'"
+          mkdir -p dist
+          cp "$APK" dist/STAYCALM.apk
+          (cd dist && sha256sum STAYCALM.apk > STAYCALM.apk.sha256)
+          echo "Validated APK bytes: $(wc -c < dist/STAYCALM.apk)"
+          cat dist/STAYCALM.apk.sha256
+      - name: Publish direct installable APK through GitHub Releases
+        # GitHub Actions artifacts are always ZIP downloads. Release assets are
+        # raw APKs that Android users can install without extracting an archive.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="android-build-${GITHUB_RUN_NUMBER}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/STAYCALM.apk dist/STAYCALM.apk.sha256 --clobber
+          else
+            gh release create "$TAG" \
+              dist/STAYCALM.apk dist/STAYCALM.apk.sha256 \
+              --target "${GITHUB_SHA}" \
+              --title "STAYCALM 3.7.6 - Direct APK (build ${GITHUB_RUN_NUMBER})" \
+              --notes "Download STAYCALM.apk directly (do not download Source code ZIP or an Actions artifact). This debug-signed APK passed unit tests, lint, archive integrity, package and Android signature checks. GitHub runners may produce different debug certificates; installing over an old STAYCALM may fail with a signature mismatch. Do not uninstall without preserving important local data." \
+              --latest
+          fi
       - uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: STAYCALM-v3.7.5-youtube-focus-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: STAYCALM-v3.7.6-verified-debug-apk-zip
+          path: dist/STAYCALM.apk
           retention-days: 30
       - name: Enable emulator acceleration
         run: |
