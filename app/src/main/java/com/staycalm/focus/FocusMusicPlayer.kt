@@ -21,7 +21,8 @@ import androidx.compose.ui.graphics.Color
 fun FocusMusicPlayer(selected:Ambient,onBrowse:()->Unit,onImport:()->Unit,importing:Boolean){
     val context=LocalContext.current
     val state=AudioPlayback.state
-    val track=if(state.id.isNotEmpty())AudioLibrary(context).find(state.id) else selected
+    val podcastActive=state.id=="podcast"
+    val track=if(state.id.isNotEmpty() && !podcastActive)AudioLibrary(context).find(state.id) else selected
     var dragging by remember{mutableStateOf(false)}
     var seekPosition by remember{mutableFloatStateOf(0f)}
     var volume by remember{mutableFloatStateOf(FocusStore(context).soundVolume())}
@@ -35,21 +36,21 @@ fun FocusMusicPlayer(selected:Ambient,onBrowse:()->Unit,onImport:()->Unit,import
             Row(verticalAlignment=Alignment.CenterVertically){
                 Surface(color=lightRose,shape=RoundedCornerShape(14.dp)){Icon(Icons.Rounded.Headphones,null,tint=roseInk,modifier=Modifier.padding(13.dp).size(24.dp))}
                 Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)){Text("FOCUS PLAYER",fontSize=9.sp,fontWeight=FontWeight.Bold,letterSpacing=1.2.sp,color=roseInk);Text(track.label,fontWeight=FontWeight.Bold,color=plumInk,maxLines=2,overflow=TextOverflow.Ellipsis)}
+                Column(Modifier.weight(1f)){Text("FOCUS PLAYER",fontSize=9.sp,fontWeight=FontWeight.Bold,letterSpacing=1.2.sp,color=roseInk);Text(if(podcastActive)"Podcast is playing · controls below" else track.label,fontWeight=FontWeight.Bold,color=plumInk,maxLines=2,overflow=TextOverflow.Ellipsis)}
                 IconButton(onClick=onBrowse){Icon(Icons.Rounded.QueueMusic,"Choose audio",tint=roseInk)}
             }
             Text("Loops until your session ends",fontSize=12.sp,color=mutedInk)
             Slider(value=if(dragging)seekPosition else state.position.toFloat().coerceIn(0f,state.duration.coerceAtLeast(1).toFloat()),onValueChange={dragging=true;seekPosition=it},onValueChangeFinished={send("seek",seekPosition.toLong());dragging=false},valueRange=0f..state.duration.coerceAtLeast(1).toFloat(),enabled=state.duration>0 && !state.loading)
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(FocusClock.displayTime(if(dragging)seekPosition.toLong() else state.position),fontSize=11.sp,color=mutedInk);Text(FocusClock.displayTime(state.duration),fontSize=11.sp,color=mutedInk)}
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){
-                IconButton(onClick={send("previous")}){Icon(Icons.Rounded.SkipPrevious,"Previous audio",tint=roseInk)}
+                IconButton(onClick={send("previous")},enabled=!podcastActive){Icon(Icons.Rounded.SkipPrevious,"Previous audio",tint=roseInk)}
                 Spacer(Modifier.width(14.dp))
                 FilledIconButton(onClick={send(if(state.playing)"pause" else "play")},enabled=!state.loading,modifier=Modifier.size(60.dp),colors=IconButtonDefaults.filledIconButtonColors(containerColor=roseInk)){
                     if(state.loading)CircularProgressIndicator(Modifier.size(24.dp),color=Color.White,strokeWidth=2.dp)
                     else Icon(if(state.playing)Icons.Rounded.Pause else Icons.Rounded.PlayArrow,if(state.playing)"Pause audio" else "Play audio",modifier=Modifier.size(30.dp))
                 }
                 Spacer(Modifier.width(14.dp))
-                IconButton(onClick={send("next")}){Icon(Icons.Rounded.SkipNext,"Next audio",tint=roseInk)}
+                IconButton(onClick={send("next")},enabled=!podcastActive){Icon(Icons.Rounded.SkipNext,"Next audio",tint=roseInk)}
             }
             Row(verticalAlignment=Alignment.CenterVertically){Icon(Icons.Rounded.VolumeDown,null,tint=mutedInk);Slider(value=volume,onValueChange={volume=it;FocusStore(context).setVolume(it);if(state.id.isNotBlank())send("volume")},modifier=Modifier.weight(1f));Icon(Icons.Rounded.VolumeUp,null,tint=mutedInk)}
             if(state.error!=null)Text(state.error,color=roseInk,fontSize=12.sp)
