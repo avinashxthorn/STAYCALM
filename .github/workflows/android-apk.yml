@@ -44,9 +44,16 @@ jobs:
           (cd dist && sha256sum STAYCALM.apk > STAYCALM.apk.sha256)
           echo "Validated APK bytes: $(wc -c < dist/STAYCALM.apk)"
           cat dist/STAYCALM.apk.sha256
+      - name: Upload direct APK (no ZIP extraction)
+        uses: actions/upload-artifact@v7
+        with:
+          path: dist/STAYCALM.apk
+          archive: false
+          retention-days: 30
       - name: Publish direct installable APK through GitHub Releases
-        # GitHub Actions artifacts are always ZIP downloads. Release assets are
-        # raw APKs that Android users can install without extracting an archive.
+        continue-on-error: true
+        # Release assets are raw APKs and a public latest-download URL.
+        # The unzipped v7 Actions artifact above is a second direct APK source.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -64,12 +71,6 @@ jobs:
               --notes "Download STAYCALM.apk directly (do not download Source code ZIP or an Actions artifact). This debug-signed APK passed unit tests, lint, archive integrity, package and Android signature checks. GitHub runners may produce different debug certificates; installing over an old STAYCALM may fail with a signature mismatch. Do not uninstall without preserving important local data." \
               --latest
           fi
-      - uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: STAYCALM-v3.7.6-verified-debug-apk-zip
-          path: dist/STAYCALM.apk
-          retention-days: 30
       - name: Enable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
