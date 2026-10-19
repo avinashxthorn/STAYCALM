@@ -2,4 +2,6 @@
 <resources>
     <string name="session_admin_label">STAYCALM session uninstall protection</string>
     <string name="session_admin_description">Protects an unfinished focus or break session from direct uninstall. Released after completion or an allowed End session. Android Settings can always deactivate this administrator.</string>
+    <string name="focus_accessibility_label">STAYCALM focused app blocking</string>
+    <string name="focus_accessibility_description">With your permission, detects only which app window is open to cover Instagram and YouTube during focus sessions. No window text or contents are read, saved, or transmitted.</string>
 </resources>
