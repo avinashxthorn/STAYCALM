@@ -91,7 +91,7 @@ class FocusStore(private val context: Context) {
         if(saved && !value){SessionUninstallGuard.clearPending(context);SessionUninstallGuard.releaseIfIdle(context)}
         saved
     }
-    fun blockDistractingApps():Boolean=prefs.getBoolean("block_distracting_apps",true)
+    fun blockDistractingApps():Boolean=prefs.getBoolean("block_distracting_apps",false)
     fun setBlockDistractingApps(value:Boolean):Boolean = synchronized(timerLock) {
         // Prevent stale UI/background callers from switching off the blocker mid-session.
         val s=state()
