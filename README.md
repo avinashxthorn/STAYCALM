@@ -90,3 +90,12 @@ The Focus page includes an optional **Watch & Listen** card:
 **Privacy:** No account access or YouTube OAuth is requested. YouTube's official embedded player connects directly to Google's/YouTube's services and can send playback/device data under their privacy practices when loaded. RSS feeds and audio URLs are fetched directly from their publishers. STAYCALM stores pasted YouTube and RSS links only on the device, does not upload planner data, and never sends local study history to YouTube/podcast publishers.
 
 **Limitations & QA:** Some YouTube videos disallow embedding, and WebView/embed attestation, restrictions or network conditions may prevent playback on particular devices. The app cannot ensure every link plays. HTTPS-only podcast sources and direct RSS audio enclosures are supported. Testing the installable APK and playback on physical Android devices is required; a source commit alone is not a verified working installer.
+
+
+## Mini YouTube search & watch (v3.7.7)
+
+The **Focus → Watch & Listen → Open mini YouTube · Search & Watch** button now opens a mini browser inside STAYCALM. It loads **YouTube's official mobile website** (`https://m.youtube.com/`) and has a simple in-app search box. Type a topic, video or podcast, select **Search**, and choose a video from YouTube's own search results. No copied URL, developer API key or YouTube account connection is required for publicly accessible videos. Your focus timer continues running because STAYCALM remains in the foreground. Video playback, ads, recommendations and controls come from YouTube's site, not a custom player.
+
+This is an **in-app website integration**, not an OAuth connector to a YouTube account and not the YouTube Data API. Users are taken to YouTube's service and its privacy terms when they open the mini browser. Android WebView/YouTube might refuse some streams or account sign-in; STAYCALM does not circumvent those restrictions or scrape search results.
+
+**Video must stay visible:** Closing mini YouTube, switching away from STAYCALM, or locking the screen stops the WebView playback. Returning reloads the YouTube home or last search page; the user explicitly starts any video again. Third-party site links open with normal Android handlers. Use public podcast RSS audio in Watch & Listen if you want actual background/lock-screen listening. Strict Accessibility/Recents blocking is still removed, and the external YouTube app remains unblocked.
