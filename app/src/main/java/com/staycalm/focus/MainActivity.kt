@@ -109,6 +109,7 @@ class MainActivity:ComponentActivity(){
                 }
             }
             var openSound by remember{mutableStateOf(false)}
+            var showMiniYouTube by remember{mutableStateOf(false)}
             var editTask by remember{mutableStateOf<PlanItem?>(null)}
             var adding by remember{mutableStateOf(false)}
             var selectedDate by remember{mutableStateOf(LocalDate.now())}
@@ -232,7 +233,22 @@ class MainActivity:ComponentActivity(){
                                 }
                                 Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, d MMMM")),fontSize=11.sp,color=Sub)
                             }
-                            Surface(onClick={page=3},shape=CircleShape,color=Blush){Icon(Icons.Rounded.Tune,"Open settings",tint=Rose,modifier=Modifier.padding(12.dp).size(20.dp))}
+                            Row(horizontalArrangement=Arrangement.spacedBy(6.dp),verticalAlignment=Alignment.CenterVertically){
+                                if(page==0) Surface(
+                                    onClick={
+                                        // Stop any underlying YouTube embed before opening the mini browser.
+                                        StudyVideoVisibility.background()
+                                        showMiniYouTube=true
+                                    },shape=CircleShape,color=Blush
+                                ){
+                                    Icon(Icons.Rounded.OndemandVideo,"Open mini YouTube",tint=Rose,
+                                        modifier=Modifier.padding(12.dp).size(20.dp))
+                                }
+                                Surface(onClick={page=3},shape=CircleShape,color=Blush){
+                                    Icon(Icons.Rounded.Tune,"Open settings",tint=Rose,
+                                        modifier=Modifier.padding(12.dp).size(20.dp))
+                                }
+                            }
                         }
                         Crossfade(targetState=page,animationSpec=tween(220),label="page transition"){displayedPage->
                         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=22.dp),verticalArrangement=Arrangement.spacedBy(18.dp)){
@@ -267,7 +283,14 @@ class MainActivity:ComponentActivity(){
                                         onSoundSelect={openSound=true},
                                         onOpenPlanner={page=1}
                                     )
-                                    FocusMediaHub(focusMode=current.mode=="focus",sessionActive=current.sessionId.isNotEmpty())
+                                    FocusMediaHub(
+                                        focusMode=current.mode=="focus",
+                                        sessionActive=current.sessionId.isNotEmpty(),
+                                        onOpenMiniYouTube={
+                                            StudyVideoVisibility.background()
+                                            showMiniYouTube=true
+                                        }
+                                    )
                                     if(blockApps && current.mode=="focus" && SessionUninstallGuard.unfinished(current)){
                                         Text(if(FocusAppBlocker.isEnabled(this@MainActivity))
                                             "Instagram and Instagram Lite are covered until this focus session ends. YouTube stays available."
@@ -597,6 +620,7 @@ class MainActivity:ComponentActivity(){
                 confirmButton={TextButton(onClick={showBlockerLockedAlert=false}){Text("Got it")}}
             )
             if(importError!=null)AlertDialog(onDismissRequest={importError=null},title={Text("Audio could not be added")},text={Text(importError.orEmpty())},confirmButton={TextButton(onClick={importError=null}){Text("OK")}})
+            if(showMiniYouTube) MiniYouTubeBrowser(onDismiss={showMiniYouTube=false})
             if(openSound)AlertDialog(onDismissRequest={openSound=false},title={Text("Your focus audio")},text={
                 Column(Modifier.heightIn(max=455.dp).verticalScroll(rememberScrollState())){
                     Text("Every track loops until the session ends.",fontSize=12.sp,color=Sub)
