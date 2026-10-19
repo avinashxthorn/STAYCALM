@@ -156,12 +156,15 @@ internal object StudyVideoVisibility {
 }
 
 @Composable
-internal fun FocusMediaHub(focusMode: Boolean, sessionActive: Boolean) {
+internal fun FocusMediaHub(
+    focusMode: Boolean,
+    sessionActive: Boolean,
+    onOpenMiniYouTube: () -> Unit
+) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("study_media", Context.MODE_PRIVATE) }
     var youtubeText by remember { mutableStateOf(prefs.getString("youtube_link", "").orEmpty()) }
     var playingId by remember { mutableStateOf<String?>(null) }
-    var showMiniYouTube by remember { mutableStateOf(false) }
     var videoError by remember { mutableStateOf<String?>(null) }
     var feedText by remember { mutableStateOf(prefs.getString("rss_link", "").orEmpty()) }
     var episodes by remember { mutableStateOf<List<PodcastEpisode>>(emptyList()) }
@@ -194,7 +197,7 @@ internal fun FocusMediaHub(focusMode: Boolean, sessionActive: Boolean) {
             Button(onClick = {
                 // Never leave an embedded YouTube video playing behind the mini browser.
                 playingId = null
-                showMiniYouTube = true
+                onOpenMiniYouTube()
             }, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Rounded.Search, null)
                 Spacer(Modifier.width(9.dp))
@@ -323,5 +326,4 @@ internal fun FocusMediaHub(focusMode: Boolean, sessionActive: Boolean) {
                     fontSize = 11.sp, color = mutedInk)
         }
     }
-    if (showMiniYouTube) MiniYouTubeBrowser(onDismiss = { showMiniYouTube = false })
 }
