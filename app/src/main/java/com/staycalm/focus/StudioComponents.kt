@@ -106,7 +106,7 @@ fun StudioFocus(
             }
         }
         if(mode=="focus"){
-            OutlinedTextField(value=intention,onValueChange={onIntention(it.take(120))},enabled=!active,label={Text("What deserves your attention?")},placeholder={Text("One small intention…")},leadingIcon={Icon(Icons.Rounded.EditNote,null,tint=roseInk)},singleLine=true,shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth())
+            OutlinedTextField(value=intention,onValueChange={onIntention(it.take(120))},enabled=!active,label={Text("What deserves your attention?")},supportingText={Text("Auto-saved to today's Planner")},placeholder={Text("One small intention…")},leadingIcon={Icon(Icons.Rounded.EditNote,null,tint=roseInk)},singleLine=true,shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth())
         }
         Surface(shape=RoundedCornerShape(22.dp),color=MaterialTheme.colorScheme.surface,border=BorderStroke(1.dp,lightRose)){
             Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
