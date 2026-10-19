@@ -10,8 +10,8 @@ android {
         applicationId = "com.staycalm.focus"
         minSdk = 26
         targetSdk = 35
-        versionCode = 14
-        versionName = "3.7.4"
+        versionCode = 15
+        versionName = "3.7.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true }
