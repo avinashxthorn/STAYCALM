@@ -14,13 +14,13 @@ A native Android focus companion in a cohesive pink theme. Kotlin, Jetpack Compo
 - Six-stage pink turtle companion, earned through completed focus time.
 - Four supplied offline tracks, personal audio imports, seeking, volume, previous/next, and lock-screen playback controls. Every track loops automatically and stops when the session completes or is ended.
 - Optional Do Not Disturb and precise session alerts, subject to Android permissions.
-- Local-only storage, no accounts or analytics.
+- Local-only storage, no accounts or analytics. Optional embedded YouTube and HTTPS podcast playback require internet; video playback connects to YouTube, RSS podcast feeds connect to their publishers.
 
 ## Build and download
 
 Pushes to `main` run `.github/workflows/android-apk.yml`. The workflow downloads licensed offline assets, runs JVM tests and Android lint, builds an installable debug APK, then exercises session and planner flows on an Android 15 emulator.
 
-In the successful Actions run, download **STAYCALM-Bloom-v3.1-debug-apk**, extract the ZIP, and install `app-debug.apk`. The **STAYCALM-verification** artifact contains check reports and emulator screenshots.
+In the successful Actions run, download **STAYCALM-v3.7.4-watch-listen-debug-apk**, extract the ZIP, and install `app-debug.apk`. The **STAYCALM-verification** artifact contains check reports and emulator screenshots.
 
 This is a debug-signed build, not a Play Store release. CI-generated debug signing keys may differ between runs; an update can require removing the previously installed debug app, which erases its local data. Production distribution needs a stable private signing key.
 
@@ -77,3 +77,17 @@ STAYCALM can **optionally** stop Instagram (`com.instagram.android`), Instagram 
 Android permits ordinary app overlays only over app windows, not above protected system UI. An unprivileged non-device-owner app cannot guarantee that blocked-app previews disappear from Recents, that overlays are never hidden by the OS/OEM, or that blocking survives permissions being revoked, force-stop, battery kills, or other system-level intervention. The user must be allowed to manage accessibility settings. For a Play Store release, declare Accessibility use in Play Console, provide the in-app disclosure/consent experience in the review video and listing, and complete required permission reviews. Never claim STAYCALM is a verified accessibility tool. Keep Google Play Protect enabled.
 
 **Device QA:** Verify Instagram, Instagram Lite, and YouTube through launcher, Recents swipe-up/down, task-switching, pausing and resuming, and completion on real Android devices. Check both permission revocation and return-to-STAYCALM paths. The Android emulator workflow does not prove all OEM Recents animations behave identically.
+
+
+## Watch & Listen (v3.7.4)
+
+The Focus page includes an optional **Watch & Listen** card:
+
+1. **YouTube video/podcast video:** Paste a full HTTPS `youtube.com/watch?v=...` or `youtu.be/...` video link and choose **Show video player**. The official YouTube embed remains visible inside STAYCALM. The focus timer and selected distracting-app blocking stay active. Playback requires an internet connection and the user pressing Play; the player stops when it is closed, when leaving the Focus page, or when STAYCALM goes into the background. Channel/profile pages and playlists are not supported by this first version.
+2. **Background audio podcasts:** Paste a public **HTTPS RSS podcast feed** in the RSS field, tap **Find episodes**, then tap an episode. STAYCALM streams the RSS publisher's HTTPS audio file using its existing media playback foreground service, with notification/lock-screen play/pause and seek support. Audio can continue when the screen is off or while the user works elsewhere. Playback stops when the focus session is completed or cancelled. Podcast publishers determine episode availability and network requirements. You can still use local imported audio as before.
+
+**YouTube policy:** YouTube's developer rules prohibit extracting or isolating YouTube audio and prohibit using an undisplayed embedded YouTube player for background playback. This feature does **not** offer background YouTube audio, downloads, audio extraction or video recording. Use independent podcast RSS audio for background listening; official YouTube Premium/background capabilities remain within YouTube's own product, not this embedded player. Play Store approval is not automatic.
+
+**Privacy:** No account access or YouTube OAuth is requested. YouTube's official embedded player connects directly to Google's/YouTube's services and can send playback/device data under their privacy practices when loaded. RSS feeds and audio URLs are fetched directly from their publishers. STAYCALM stores pasted YouTube and RSS links only on the device, does not upload planner data, and never sends local study history to YouTube/podcast publishers.
+
+**Limitations & QA:** Some YouTube videos disallow embedding, and WebView/embed attestation, restrictions or network conditions may prevent playback on particular devices. The app cannot ensure every link plays. HTTPS-only podcast sources and direct RSS audio enclosures are supported. Testing the installable APK and playback on physical Android devices is required; a source commit alone is not a verified working installer.
