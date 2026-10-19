@@ -19,11 +19,17 @@ class FocusAccessibilityService : AccessibilityService() {
         if (e.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
             e.eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED) return
         val pkg = e.packageName?.toString()?.trim().orEmpty()
-        if (pkg.isBlank() || FocusBlockPolicy.isSystemTransition(pkg)) return
-        // Our own cover is a LinearLayout. Only a real MainActivity window event
-        // is allowed to clear the cover; ignore UI events caused by the overlay.
+        if (pkg.isBlank()) return
+        // Skip all package processing outside user-started unfinished focus sessions.
+        val store = FocusStore(this)
+        val state = store.state()
+        if (state.mode != "focus" || state.sessionId.isEmpty() ||
+            !store.blockDistractingApps()) return
+        // Our shield is itself a LinearLayout. Only a real MainActivity event
+        // may clear it; never treat a shield event as a safe destination.
         if (pkg == packageName && e.className?.toString() != MainActivity::class.java.name)
             return
+        // SystemUI transitions inform the watcher to keep/rebuild the shield.
         TimerService.reportForeground(this, pkg)
     }
 
