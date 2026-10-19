@@ -59,6 +59,8 @@ private val StaycalmDarkColors=darkColorScheme(primary=Color(0xFFD66A9D),onPrima
 
 class MainActivity:ComponentActivity(){
     private lateinit var store:FocusStore
+    override fun onStart(){super.onStart();StudyVideoVisibility.foreground()}
+    override fun onStop(){StudyVideoVisibility.background();super.onStop()}
     override fun onResume(){super.onResume();if(::store.isInitialized){
         store.completeIfDue()
         SessionUninstallGuard.releaseIfIdle(this)
@@ -266,6 +268,7 @@ class MainActivity:ComponentActivity(){
                                         onSoundSelect={openSound=true},
                                         onOpenPlanner={page=1}
                                     )
+                                    FocusMediaHub(focusMode=current.mode=="focus",sessionActive=current.sessionId.isNotEmpty())
                                     if(blockApps && current.mode=="focus" && SessionUninstallGuard.unfinished(current)){
                                         Text(if(FocusAppBlocker.isEnabled(this@MainActivity))
                                             "Instagram, Instagram Lite and YouTube are blocked until this focus session ends."
