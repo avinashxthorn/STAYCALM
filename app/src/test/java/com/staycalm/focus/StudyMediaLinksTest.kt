@@ -29,4 +29,28 @@ class StudyMediaLinksTest {
         assertNull(StudyMediaLinks.secureAudioUrl("file:///sdcard/episode.mp3"))
         assertNull(StudyMediaLinks.secureAudioUrl("https://localhost/podcast.xml"))
     }
+    @Test fun miniYoutubeSearchUsesOfficialMobileResultsAndEncodesQuery() {
+        assertEquals("https://m.youtube.com/", MiniYouTubeNavigation.HOME)
+        assertEquals("https://m.youtube.com/results?search_query=biology+lecture+%26+podcast",
+            MiniYouTubeNavigation.searchUrl("  biology lecture & podcast  "))
+    }
+
+    @Test fun miniYoutubeNavigationAcceptsOnlyOfficialYoutubeHosts() {
+        for(url in listOf(
+            "https://m.youtube.com/",
+            "https://m.youtube.com/results?search_query=study",
+            "https://www.youtube.com/watch?v=M7lc1UVf-VE",
+            "https://consent.youtube.com/"
+        )) assertTrue(MiniYouTubeNavigation.isYouTubeDestination(url))
+
+        for(url in listOf(
+            "http://youtube.com/watch?v=M7lc1UVf-VE",
+            "https://youtube.com.evil.example/watch?v=M7lc1UVf-VE",
+            "javascript:alert(1)",
+            "file:///etc/passwd",
+            "https://notyoutube.com/",
+            "https://name:password@youtube.com/"
+        )) assertFalse(MiniYouTubeNavigation.isYouTubeDestination(url))
+    }
+
 }
