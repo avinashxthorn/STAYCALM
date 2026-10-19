@@ -242,7 +242,7 @@ internal fun FocusMediaHub(focusMode: Boolean, sessionActive: Boolean) {
                         }
                     }
                     val embed = remember(id) {
-                        """<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#000"><iframe width="100%" height="100%" style="border:0;position:absolute;inset:0" src="https://www.youtube.com/embed/$id?playsinline=1" title="YouTube official player" allow="encrypted-media;picture-in-picture;fullscreen" allowfullscreen></iframe></body></html>"""
+                        """<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="strict-origin-when-cross-origin"></head><body style="margin:0;background:#000"><iframe width="100%" height="100%" style="border:0;position:absolute;inset:0" src="https://www.youtube.com/embed/$id?playsinline=1" title="YouTube official player" allow="encrypted-media;picture-in-picture;fullscreen" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></body></html>"""
                     }
                     val load = {
                         // HTTPS base URL provides a Referer, as required by YouTube's embeds.
