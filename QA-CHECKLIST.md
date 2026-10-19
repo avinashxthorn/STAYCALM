@@ -36,3 +36,13 @@ No finite set of checks can guarantee an app has no defects on every Android dev
 - [ ] Completion and successful free/paid cancellation remove Device Admin; blocked cancellation does not.
 - [ ] A new protected session requires approval again after administrator removal finishes.
 - [ ] Android Settings remains accessible for administrator deactivation; no destructive policies are requested.
+
+## v3.7.2 planner and blocker regression checks
+
+- Save a planner task with a reminder a few minutes ahead; grant Notifications and Alarms & reminders, lock the screen, and verify an alert arrives near its chosen minute.
+- Deny exact-alarm access and check the app's warning and inexact delivery fallback (timing may be delayed).
+- Edit the task date/time and verify only the new reminder fires. Mark it complete or delete it and ensure the old notification does not fire.
+- Reboot and change the system clock or time zone with an upcoming task and verify re-arming.
+- Type a focus-page intention and check that exactly one entry appears on today's planner date, updates while editing, and survives reopening.
+- Start focus with Block Apps enabled, then try switching it off; verify a modal alert appears, the switch remains On, and blocking continues through pause/resume.
+- Complete or allowably end the session and verify the switch can then be turned Off.
