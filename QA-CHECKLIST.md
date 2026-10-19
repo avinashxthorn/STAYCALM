@@ -88,3 +88,5 @@ No finite set of checks can guarantee an app has no defects on every Android dev
 - Open mini browser while a pasted video is playing; the old embed must be removed so two videos never play concurrently.
 - Verify HTTP URLs, spoofed youtube.com hosts, data/file schemes cannot navigate within the mini browser.
 - Test poor connectivity, WebView blocked content, sign-in limitations, and video embed restrictions on the target Android phone. Android installation of the debug APK can fail over older builds with different signing keys.
+
+- Verify mini YouTube also opens from the one-tap video icon in the Focus header. Closing it returns to the same focus timer without resetting the session.
