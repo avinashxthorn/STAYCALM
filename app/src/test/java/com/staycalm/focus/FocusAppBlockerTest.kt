@@ -17,6 +17,24 @@ class FocusAppBlockerTest {
         }
     }
 
+    @Test fun recentsTransitionsMustNotBeTreatedAsSafeApps() {
+        assertTrue(FocusBlockPolicy.isSystemTransition("com.android.systemui"))
+        assertTrue(FocusBlockPolicy.isSystemTransition("android"))
+        assertTrue(FocusBlockPolicy.isSystemTransition("com.oplus.recents"))
+        assertFalse(FocusBlockPolicy.isSystemTransition("com.instagram.lite"))
+        assertFalse(FocusBlockPolicy.isSystemTransition("com.android.settings"))
+        assertTrue(FocusBlockPolicy.isLauncher("com.google.android.apps.nexuslauncher"))
+        assertTrue(FocusBlockPolicy.isLauncher("com.oplus.launcher"))
+        assertFalse(FocusBlockPolicy.isLauncher("com.instagram.android"))
+    }
+
+    @Test fun aPausedProtectedSessionStillBlocksButAnEndedSessionDoesNot() {
+        assertTrue(FocusBlockPolicy.shouldBlock(paused, true, "com.instagram.lite"))
+        assertTrue(FocusBlockPolicy.shouldBlock(active, true, "com.google.android.youtube"))
+        assertFalse(FocusBlockPolicy.shouldBlock(paused.copy(sessionId = ""), true, "com.instagram.lite"))
+        assertFalse(FocusBlockPolicy.shouldBlock(paused.copy(mode = "break"), true, "com.instagram.lite"))
+    }
+
     @Test fun otherAppsAndBreaksRemainUsable() {
         assertFalse(FocusBlockPolicy.shouldBlock(active, true, "com.android.settings"))
         assertFalse(FocusBlockPolicy.shouldBlock(active, true, "com.android.chrome"))
