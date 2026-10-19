@@ -42,14 +42,43 @@ class FocusStore(private val context: Context) {
         val task=PlanItem(UUID.randomUUID().toString(),title,date,time,duration,false,remind)
         savePlans(tasks()+task);return task
     }
-    fun replaceTask(item:PlanItem) {savePlans(tasks().map{if(it.id==item.id)item else it})}
-    fun deleteTask(item:PlanItem) {FocusAlarms.cancelTask(context,item.id);savePlans(tasks().filterNot{it.id==item.id})}
+    private fun detachAutoIntention(id:String){
+        if(prefs.getString("auto_intention_plan_id",null)==id)
+            prefs.edit().remove("auto_intention_plan_id").remove("auto_intention_plan_date").apply()
+    }
+    fun replaceTask(item:PlanItem) {detachAutoIntention(item.id);savePlans(tasks().map{if(it.id==item.id)item else it})}
+    fun deleteTask(item:PlanItem) {detachAutoIntention(item.id);FocusAlarms.cancelTask(context,item.id);savePlans(tasks().filterNot{it.id==item.id})}
     fun logs():List<FocusLog> = runCatching{
         val a=JSONArray(prefs.getString("logs","[]")?:"[]")
         (0 until a.length()).map{val o=a.getJSONObject(it);FocusLog(o.getString("id"),o.getLong("at"),o.getInt("minutes"),o.optString("taskId"),o.optString("intention"))}
     }.getOrDefault(emptyList())
     fun intention():String=prefs.getString("intention","")?:""
     fun setIntention(value:String){prefs.edit().putString("intention",value.take(120)).apply()}
+    // Maintain one Planner draft for the home-page intention; do not touch other alarms.
+    fun saveIntentionToPlanner(value:String) = synchronized(timerLock) {
+        val title=value.trim().take(120)
+        val today=LocalDate.now().toString()
+        val linkedId=prefs.getString("auto_intention_plan_id",null)
+        val linkedDate=prefs.getString("auto_intention_plan_date",null)
+        val all=tasks()
+        val index=if(linkedDate==today)all.indexOfFirst{it.id==linkedId && !it.done} else -1
+        if(title.isBlank()){
+            if(index>=0){
+                prefs.edit().putString("plans",JSONArray().apply{
+                    all.forEachIndexed{position,item->if(position!=index)put(encode(item))}
+                }.toString()).remove("auto_intention_plan_id").remove("auto_intention_plan_date").apply()
+            }else prefs.edit().remove("auto_intention_plan_id").remove("auto_intention_plan_date").apply()
+        }else{
+            val task=if(index>=0)all[index].copy(title=title) else PlanItem(
+                UUID.randomUUID().toString(),title,today,
+                LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")),
+                state().durationMinutes,false,false)
+            val next=if(index>=0)all.toMutableList().apply{set(index,task)} else all+task
+            prefs.edit().putString("plans",JSONArray().apply{next.forEach{put(encode(it))}}.toString())
+                .putString("auto_intention_plan_id",task.id)
+                .putString("auto_intention_plan_date",today).apply()
+        }
+    }
     fun completion():String?=prefs.getString("completion",null)
     fun dismissCompletion(){prefs.edit().remove("completion").apply()}
     fun completedMinutes():Int=logs().sumOf{it.minutes}
@@ -63,10 +92,15 @@ class FocusStore(private val context: Context) {
         saved
     }
     fun blockDistractingApps():Boolean=prefs.getBoolean("block_distracting_apps",true)
-    fun setBlockDistractingApps(value:Boolean){
-        prefs.edit().putBoolean("block_distracting_apps",value).apply()
+    fun setBlockDistractingApps(value:Boolean):Boolean = synchronized(timerLock) {
+        // Prevent stale UI/background callers from switching off the blocker mid-session.
+        val s=state()
+        if(!value && blockDistractingApps() && s.mode=="focus" && SessionUninstallGuard.unfinished(s))
+            return@synchronized false
+        if(!prefs.edit().putBoolean("block_distracting_apps",value).commit())return@synchronized false
         TimerService.ensureRunning(context)
         if(!value)TimerService.stop(context)
+        true
     }
     fun lockTimerNotification():Boolean=prefs.getBoolean("lock_timer_notification",true)
     fun setLockTimerNotification(value:Boolean){
@@ -209,12 +243,13 @@ object FocusDnd {
 
 object Notice {
     private const val FINISH="staycalm_finish"
-    private const val REMIND="staycalm_plan"
+    // New channel because Android doesn't allow raising an existing channel's importance.
+    private const val REMIND="staycalm_plan_on_time_v2"
     private const val ACTIVE="staycalm_active"
     fun channels(context:Context){
         val n=context.getSystemService(NotificationManager::class.java)
         n.createNotificationChannel(NotificationChannel(FINISH,"Completed focus sessions",NotificationManager.IMPORTANCE_HIGH))
-        n.createNotificationChannel(NotificationChannel(REMIND,"Plan reminders",NotificationManager.IMPORTANCE_DEFAULT))
+        n.createNotificationChannel(NotificationChannel(REMIND,"Plan reminders",NotificationManager.IMPORTANCE_HIGH))
         n.createNotificationChannel(NotificationChannel(ACTIVE,"Ongoing focus",NotificationManager.IMPORTANCE_LOW).apply{setSound(null,null);enableVibration(false)})
     }
     private fun post(context:Context,channel:String,id:Int,title:String,body:String){
@@ -222,6 +257,7 @@ object Notice {
         val open=PendingIntent.getActivity(context,0,Intent(context,MainActivity::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val builder=Notification.Builder(context,channel).setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(title).setContentText(body).setAutoCancel(true).setContentIntent(open)
+        if(channel==REMIND)builder.setCategory(Notification.CATEGORY_REMINDER).setPriority(Notification.PRIORITY_HIGH)
         try{context.getSystemService(NotificationManager::class.java).notify(id,builder.build())}catch (_:SecurityException){}
     }
     fun sessionNotification(context:Context,finishAt:Long,mode:String="focus"):Notification {
@@ -271,15 +307,29 @@ object FocusAlarms {
         } else alarms.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP,at,alarm)
     }
     fun cancelFocus(c:Context){manager(c).cancel(pi(c,"focus",1000))}
+    // Intent extras are not part of PendingIntent equality; encode each task id in its URI.
+    private fun taskPi(c:Context,id:String):PendingIntent=PendingIntent.getBroadcast(c,0,
+        Intent(c,AlarmReceiver::class.java).setAction("task")
+            .setData(android.net.Uri.parse("staycalm://plan/"+android.net.Uri.encode(id)))
+            .putExtra("id",id),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     fun scheduleTask(c:Context,item:PlanItem){
         cancelTask(c,item.id)
+        if(!item.remind || item.done)return
         val dateTime=runCatching{LocalDateTime.of(LocalDate.parse(item.date),LocalTime.parse(item.time))}.getOrNull()?:return
         val whenMs=dateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         if(whenMs<=System.currentTimeMillis())return
-        val pending=PendingIntent.getBroadcast(c,item.id.hashCode(),Intent(c,AlarmReceiver::class.java).setAction("task").putExtra("id",item.id),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        manager(c).setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,whenMs,pending)
+        val alarms=manager(c)
+        val pending=taskPi(c,item.id)
+        if(preciseAllowed(c)){
+            try{alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,whenMs,pending)}
+            catch (_:SecurityException){alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,whenMs,pending)}
+        }else alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,whenMs,pending)
     }
-    fun cancelTask(c:Context,id:String){manager(c).cancel(pi(c,"task",id.hashCode()))}
+    fun cancelTask(c:Context,id:String){
+        manager(c).cancel(taskPi(c,id))
+        // Cancel legacy-version reminders on upgrade, including old pending intent IDs.
+        manager(c).cancel(pi(c,"task",id.hashCode()))
+    }
 }
 
 class AlarmReceiver:BroadcastReceiver(){
@@ -305,7 +355,13 @@ class AlarmReceiver:BroadcastReceiver(){
 
 class BootReceiver:BroadcastReceiver(){
     override fun onReceive(context:Context,intent:Intent){
-        if(intent.action!=Intent.ACTION_BOOT_COMPLETED && intent.action!=Intent.ACTION_MY_PACKAGE_REPLACED)return
+        if(intent.action!=Intent.ACTION_BOOT_COMPLETED &&
+            intent.action!=Intent.ACTION_MY_PACKAGE_REPLACED &&
+            intent.action!=Intent.ACTION_TIME_CHANGED &&
+            intent.action!=Intent.ACTION_TIMEZONE_CHANGED &&
+            intent.action!=AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED)return
+        if(intent.action==AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED &&
+            !FocusAlarms.preciseAllowed(context))return
         val store=FocusStore(context)
         store.completeIfDue()
         SessionUninstallGuard.releaseIfIdle(context)
