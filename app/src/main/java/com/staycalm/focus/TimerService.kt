@@ -14,6 +14,18 @@ import android.os.Looper
 class TimerService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var watcher: FocusAppWatcher
+    private var lastNotificationCheckElapsed = 0L
+
+    /** Called immediately from the consented Accessibility service on app-window changes. */
+    private fun handleWindowChanged(packageName: String) {
+        val store = FocusStore(this)
+        if (store.completeIfDue()) {
+            watcher.hide()
+            stopSelf()
+            return
+        }
+        watcher.onWindowChanged(packageName, store.state(), store.blockDistractingApps())
+    }
 
     private val pulse = object : Runnable {
         override fun run() {
@@ -30,12 +42,18 @@ class TimerService : Service() {
                 return
             }
             watcher.tick(state, store.blockDistractingApps())
-            val notificationIsMissing = getSystemService(NotificationManager::class.java)
-                .activeNotifications.none { it.id == 1002 }
-            if (notificationIsMissing && (store.lockTimerNotification() || FocusAppBlocker.keepAlive(this@TimerService, state))) {
-                Notice.sessionStarted(this@TimerService, state.endWall, state.mode)
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (now - lastNotificationCheckElapsed >= 1_000L) {
+                lastNotificationCheckElapsed = now
+                val notificationIsMissing = getSystemService(NotificationManager::class.java)
+                    .activeNotifications.none { it.id == 1002 }
+                if (notificationIsMissing && (store.lockTimerNotification() ||
+                    FocusAppBlocker.keepAlive(this@TimerService, state))) {
+                    Notice.sessionStarted(this@TimerService, state.endWall, state.mode)
+                }
             }
-            handler.postDelayed(this, 1_000L)
+            // Frequent reconciliation backs up event-driven detection on restrictive OEMs.
+            handler.postDelayed(this, 350L)
         }
     }
 
@@ -83,6 +101,16 @@ class TimerService : Service() {
         private val mainHandler = Handler(Looper.getMainLooper())
         private val startQueued = java.util.concurrent.atomic.AtomicBoolean(false)
         @Volatile private var activeService: TimerService? = null
+
+        fun reportForeground(context: Context, packageName: String) {
+            if (packageName.isBlank()) return
+            val app = context.applicationContext
+            mainHandler.post {
+                val runningService = activeService
+                if (runningService != null) runningService.handleWindowChanged(packageName)
+                else ensureRunning(app)
+            }
+        }
 
         fun stop(context: Context) {
             val app = context.applicationContext
