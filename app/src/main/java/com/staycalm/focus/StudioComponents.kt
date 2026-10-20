@@ -57,7 +57,7 @@ fun StudioFocus(
         Column{
             Text("YOUR FOCUS SPACE",fontSize=10.sp,fontWeight=FontWeight.SemiBold,letterSpacing=1.6.sp,color=roseInk)
             Spacer(Modifier.height(6.dp))
-            Text(if(mode=="focus")"Make room to focus." else "Rest is part of progress.",fontSize=29.sp,fontWeight=FontWeight.SemiBold,color=plumInk,letterSpacing=(-1).sp,lineHeight=36.sp)
+            Text(if(mode=="focus")"Let your focus bloom." else "Rest is part of progress.",fontSize=29.sp,fontWeight=FontWeight.SemiBold,color=plumInk,letterSpacing=(-1).sp,lineHeight=36.sp)
         }
         Surface(shape=RoundedCornerShape(32.dp),color=MaterialTheme.colorScheme.surface,border=BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant)){
             Column(Modifier.fillMaxWidth().background(cardGradient).padding(20.dp),horizontalAlignment=Alignment.CenterHorizontally){
