@@ -3,6 +3,7 @@ package com.staycalm.focus
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -68,9 +69,9 @@ fun FirstRunOnboarding(
     var goal by rememberSaveable { mutableIntStateOf(120) }
     var quotes by rememberSaveable { mutableIntStateOf(120) }
     val backdrop = if (LocalStaycalmDark.current) {
-        Brush.verticalGradient(listOf(Color(0xFF20151E), Color(0xFF34202E), Color(0xFF191219)))
+        Brush.verticalGradient(listOf(Color(0xFF161B19), Color(0xFF232925), Color(0xFF171717)))
     } else {
-        Brush.verticalGradient(listOf(Color(0xFFFFF6F9), Color(0xFFFCE8F0), Color(0xFFFFFBFC)))
+        Brush.verticalGradient(listOf(Color(0xFFFFFFFF), Color(0xFFF3F8F6), Color(0xFFF8F9FA)))
     }
 
     Column(
@@ -82,8 +83,8 @@ fun FirstRunOnboarding(
             Icon(Icons.Rounded.LocalFlorist, contentDescription = null,
                 tint = scheme.primary, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(8.dp))
-            Text("staycalm.", fontWeight = FontWeight.ExtraBold, fontSize = 23.sp,
-                color = scheme.primary, letterSpacing = (-0.7).sp)
+            Text("staycalm.", fontWeight = FontWeight.SemiBold, fontSize = 23.sp,
+                color = scheme.onBackground, letterSpacing = (-0.7).sp)
             Spacer(Modifier.weight(1f))
             if (profileStep) {
                 Text("YOUR SPACE", fontSize = 10.sp, fontWeight = FontWeight.Bold,
@@ -125,9 +126,11 @@ fun FirstRunOnboarding(
                 horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                 repeat(3) { dot ->
                     val selected = dot == pager.currentPage
+                    val animatedWidth by animateDpAsState(if (selected) 27.dp else 8.dp,
+                        animationSpec = tween(280), label = "page progress dot")
                     Box(
                         Modifier.padding(horizontal = 4.dp)
-                            .size(width = if (selected) 27.dp else 8.dp, height = 8.dp)
+                            .size(width = animatedWidth, height = 8.dp)
                             .clip(CircleShape)
                             .background(if (selected) scheme.primary else scheme.primary.copy(alpha = .23f))
                     )
