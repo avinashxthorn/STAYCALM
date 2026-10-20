@@ -12,8 +12,8 @@ android {
         applicationId = "com.staycalm.focus"
         minSdk = 26
         targetSdk = 35
-        versionCode = System.getenv("STAYCALM_VERSION_CODE")?.toInt() ?: 22
-        versionName = "4.1.0"
+        versionCode = System.getenv("STAYCALM_VERSION_CODE")?.toInt() ?: 23
+        versionName = "4.2.0"
         testInstrumentationRunner = "com.staycalm.focus.AccountTestRunner"
     }
     val permanentKey = System.getenv("STAYCALM_KEYSTORE_PATH")

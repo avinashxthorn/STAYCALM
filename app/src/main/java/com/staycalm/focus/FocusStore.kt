@@ -372,5 +372,6 @@ class BootReceiver:BroadcastReceiver(){
         }
         store.tasks().filter{it.remind&&!it.done}.forEach{FocusAlarms.scheduleTask(context,it)}
         MotivationAlarms.schedule(context)
+        AiCoachWork.schedule(context)
     }
 }
