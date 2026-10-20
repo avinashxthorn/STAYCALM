@@ -1,0 +1,24 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/backups/{deviceId} {
+      function owner() {
+        return request.auth != null && request.auth.uid == userId
+          && request.auth.token.email_verified == true;
+      }
+      allow read: if owner();
+      allow create, update: if owner()
+        && request.resource.data.keys().hasAll(['schema', 'payload', 'label', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['schema', 'payload', 'label', 'updatedAt'])
+        && request.resource.data.schema == 1
+        && request.resource.data.payload is string
+        && request.resource.data.payload.size() <= 750000
+        && request.resource.data.label is string
+        && request.resource.data.label.size() <= 100
+        && request.resource.data.updatedAt == request.time;
+      // Copies survive client logout and local restores. Owners can delete via console.
+      allow delete: if false;
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

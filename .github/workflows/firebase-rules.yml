@@ -1,0 +1,25 @@
+name: Firebase backup security rules
+on:
+  push:
+    branches: [main, feat/free-accounts-cloud-backup]
+  pull_request:
+    branches: [main]
+jobs:
+  rules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm install --no-audit --no-fund
+        working-directory: tests/firebase
+      - run: npm test
+        working-directory: tests/firebase

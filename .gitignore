@@ -7,3 +7,9 @@
 /app/src/main/res/font/manrope.ttf
 /app/src/main/res/raw/*.mp3
 .DS_Store
+/app/google-services.json
+/tests/firebase/node_modules/
+/tests/firebase/package-lock.json
+firebase-debug.log
+firestore-debug.log
+ui-debug.log

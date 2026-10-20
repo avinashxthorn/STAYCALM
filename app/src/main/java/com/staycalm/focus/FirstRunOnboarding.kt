@@ -53,6 +53,7 @@ private val introCaptions = listOf("01 / A CALMER START", "02 / YOUR STUDY STORY
  */
 @Composable
 fun FirstRunOnboarding(
+    onAccount: () -> Unit = {},
     onFinish: (name: String, subject: String, goalMinutes: Int, quoteMinutes: Int) -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -81,6 +82,7 @@ fun FirstRunOnboarding(
             Text("staycalm.", fontWeight = FontWeight.ExtraBold, fontSize = 23.sp,
                 color = scheme.primary, letterSpacing = (-0.7).sp)
             Spacer(Modifier.weight(1f))
+            TextButton(onClick = onAccount) { Text("Log in / Restore") }
             if (!profileStep) {
                 TextButton(onClick = { profileStep = true }) {
                     Text("Skip", color = scheme.onSurfaceVariant)

@@ -69,6 +69,7 @@ class MainActivity:ComponentActivity(){
     }}
     override fun onCreate(savedInstanceState:android.os.Bundle?){super.onCreate(savedInstanceState);store=FocusStore(this);Notice.channels(this);LauncherIconSwitcher.apply(this,Personalization(this).darkMode())
         setContent {
+            var showAccount by rememberSaveable { mutableStateOf(false) }
             val personalization=remember{Personalization(this@MainActivity)}
             val journal=remember{StudyJournal(this@MainActivity)}
             var isDark by remember{mutableStateOf(personalization.darkMode())}
@@ -201,8 +202,10 @@ class MainActivity:ComponentActivity(){
             val today=logs.filter{Instant.ofEpochMilli(it.at).atZone(ZoneId.systemDefault()).toLocalDate()==LocalDate.now()}.sumOf{it.minutes}
             CompositionLocalProvider(LocalStaycalmDark provides isDark) {
             MaterialTheme(colorScheme=if(isDark)StaycalmDarkColors else StaycalmColors,typography=pinkTypography()){
-                if (!profileReady) {
-                    FirstRunOnboarding(onFinish = { name, subject, dailyGoal, quoteMinutes ->
+                if (showAccount) {
+                    AccountScreen(this@MainActivity, onClose = { showAccount=false }, onRestored = { recreate() })
+                } else if (!profileReady) {
+                    FirstRunOnboarding(onAccount = { showAccount=true }, onFinish = { name, subject, dailyGoal, quoteMinutes ->
                         personalization.setInterval(quoteMinutes)
                         personalization.saveProfile(name, subject)
                         store.setDailyGoal(dailyGoal)
@@ -416,6 +419,7 @@ class MainActivity:ComponentActivity(){
                                 }
                                 else->{
                                     Header("Make it yours.","A little control goes a long way.")
+                                    Button(onClick={showAccount=true},modifier=Modifier.fillMaxWidth()) { Text("Account & backup") }
                                     Surface(shape=RoundedCornerShape(23.dp),color=MaterialTheme.colorScheme.surface){
                                         Column(Modifier.fillMaxWidth().padding(19.dp),verticalArrangement=Arrangement.spacedBy(11.dp)){
                                             Text("Your space, ${profileName.ifBlank{"friend"}}",fontWeight=FontWeight.Bold,fontSize=18.sp)
@@ -550,9 +554,9 @@ class MainActivity:ComponentActivity(){
                                         }
                                     }
                                     Surface(shape=RoundedCornerShape(22.dp),color=MaterialTheme.colorScheme.surface){
-                                        Column(Modifier.padding(19.dp)){Text("Private by design",fontWeight=FontWeight.Bold,fontSize=17.sp);Spacer(Modifier.height(7.dp));Text("Your plans, focus history and turtle live on this device. No accounts, cloud backup, analytics trackers or AI.",color=Sub,fontSize=13.sp)}
+                                        Column(Modifier.padding(19.dp)){Text("Your data, your choice",fontWeight=FontWeight.Bold,fontSize=17.sp);Spacer(Modifier.height(7.dp));Text("Your data saves locally. Optional account backup uploads plans, history and preferences to your private Firebase account. PDFs and imported audio need a full file export. No analytics trackers or AI.",color=Sub,fontSize=13.sp)}
                                     }
-                                    Text("STAYCALM · BLOOM EDITION 3.6",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
+                                    Text("STAYCALM · BLOOM EDITION 3.8",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
                                 }
                             }
                             Spacer(Modifier.height(24.dp))
