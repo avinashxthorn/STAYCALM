@@ -1,4 +1,10 @@
-# STAYCALM 4.0.1 — progress backup and private accounts
+# STAYCALM 4.1 — podcasts and permanent updates
+
+RSS audio displays ten episodes at a time with **Show more**, including publisher-provided next pages. **Clear link** empties either pasted link and removes its player/results/errors; RSS clearing also stops podcast playback and discards late fetches. The podcast card and Android media notification name the episode and support pause/resume, seek and back/forward 30 seconds. All audio entries supplied by the feed are available; publishers can limit their archive.
+
+Production releases now require a permanent pinned signing key and use increasing version codes. Normal updates retain settings, account state and planner files without logout. Follow [the one-time signing setup](SIGNING-SETUP.md) before a new release can publish. Old temporary-key installations may need a one-time backup/migration because Android requires matching signing keys.
+
+## Progress backup and private accounts
 
 Logout now returns to Login and hides the planner, uploaded files, session history and Insights. Every Firebase UID has separate local preferences, planner/audio folders and cloud-sync bookkeeping. Local copies are retained privately for that same account; another login cannot inherit them. Existing signed-in 3.9 installations migrate their data into their account automatically. If upgrading while signed out, earlier unclaimed data is kept privately and is never automatically assigned to a new account; recover a cloud copy or import a full ZIP after signing in.
 
@@ -38,16 +44,16 @@ A native Android focus companion in a cohesive pink theme. Kotlin, Jetpack Compo
 - Optional Do Not Disturb and precise session alerts, subject to Android permissions.
 - Local-first storage with optional email accounts and opt-in cloud recovery; no analytics trackers. Optional embedded YouTube and HTTPS podcast playback require internet; video playback connects to YouTube, RSS podcast feeds connect to their publishers.
 
-## Build and download (v4.0.1)
+## Build and download (v4.1)
 
 **Mobile-friendly download:** After the latest GitHub Actions build succeeds, open [STAYCALM Releases](https://github.com/avinashxthorn/STAYCALM/releases/latest), expand **Assets**, and download **STAYCALM.apk**. This is a real, installable APK, **not** a ZIP file. Do not choose **Source code (zip)** or **Source code (tar.gz)**.
 
 - The latest release's direct APK URL (once published) is [STAYCALM.apk](https://github.com/avinashxthorn/STAYCALM/releases/latest/download/STAYCALM.apk).
 - **Alternative:** Open the latest successful [GitHub Actions run](https://github.com/avinashxthorn/STAYCALM/actions) and select **STAYCALM.apk** in its Artifacts section. The workflow uses `actions/upload-artifact@v7` with `archive: false`, which downloads this one APK **without** a ZIP/extraction step.
 - Before publishing, CI runs unit tests and Android lint, compiles the app, checks the APK ZIP's internal integrity, verifies its Android signature with `apksigner`, verifies its application ID with `aapt`, and generates `STAYCALM.apk.sha256` for checking download integrity. An Android 15 emulator UI test also runs separately. No physical-device install is guaranteed by these checks.
-- If the APK fails to install over an older STAYCALM, Android may be rejecting a **signing certificate mismatch**: debug builds produced by separate GitHub runners can use different temporary debug signing keys. An unchanged package ID requires the same signing certificate to update in place. **Do not uninstall the previous app without saving important planner and focus data**; uninstalling removes local records. A permanent fix requires configuring a securely held stable signing key.
+- If the APK fails to install over an older STAYCALM, Android may be rejecting a **signing certificate mismatch**: debug builds produced by separate GitHub runners can use different temporary debug signing keys. An unchanged package ID requires the same signing certificate to update in place. **Do not uninstall the previous app without saving important planner and focus data**; uninstalling removes local records. The permanent signing configuration is now included; the owner must add the two repository secrets described in [signing setup](SIGNING-SETUP.md).
 
-The checked APK lives at `app/build/outputs/apk/debug/app-debug.apk` during CI; it is copied unchanged to `dist/STAYCALM.apk` for the direct download.
+Production APKs are built at `app/build/outputs/apk/release/app-release.apk` and copied to `dist/STAYCALM.apk`. Pull requests and missing-key runs create `STAYCALM-test-only.apk`, which is not a permanent update build. See [signing setup](SIGNING-SETUP.md).
 
 ### Local build
 
@@ -68,7 +74,7 @@ See `DESIGN-SYSTEM.md`, `ASSET-LICENSES.md`, and `QA-CHECKLIST.md`.
 ### First launch (v3.3)
 
 New users see a three-page swipeable intro to focus sessions, their dated work archive,
-progress and study encouragement. **Get started** opens a separate, local-only profile page
+progress and study encouragement. **Get started** opens Login / Sign up, followed by a profile page
 with a required name, an optional subject, a daily goal and optional motivation reminders.
 Saving the profile opens the Focus tab. Existing profiles skip onboarding on subsequent launches.
 

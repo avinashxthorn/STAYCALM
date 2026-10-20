@@ -52,6 +52,21 @@ class AppFlowTest {
         val exported=shell("ls /data/local/tmp/staycalm-screenshots/$name.png")
         assertTrue("Screenshot must survive test cleanup: $exported",exported.contains("$name.png"))
     }
+    @Test fun packageReplacementKeepsSettingsAndSignedInAccount() {
+        val context = ui.activity
+        val prefs = AccountData.preferences(context)
+        prefs.edit().putBoolean("dark_theme", true).putInt("daily_goal", 150).commit()
+        val uid = AccountData.sessionUid(context)
+        ui.runOnUiThread { BootReceiver().onReceive(context,
+            android.content.Intent(android.content.Intent.ACTION_MY_PACKAGE_REPLACED)) }
+        assertEquals(uid, AccountData.sessionUid(context))
+        assertTrue(prefs.getBoolean("dark_theme", false))
+        assertEquals(150, prefs.getInt("daily_goal", 0))
+        ui.activityRule.scenario.recreate()
+        assertEquals(uid, AccountData.sessionUid(ui.activity))
+        ui.onNodeWithText("Insights").assertExists()
+        ui.onNodeWithText("Welcome back").assertDoesNotExist()
+    }
     @Test fun accountAndRecoveryScreenIsReachable(){
         ui.onNodeWithText("Settings").performClick()
         ui.onNodeWithText("Account & backup").performScrollTo().performClick()

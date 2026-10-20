@@ -12,7 +12,7 @@ import androidx.compose.runtime.*
 import java.io.File
 
 // The service owns playback; the UI only observes it. No Activity reference is retained.
-data class AudioStatus(val id:String="",val playing:Boolean=false,val loading:Boolean=false,val position:Long=0,val duration:Long=0,val error:String?=null)
+data class AudioStatus(val id:String="",val playing:Boolean=false,val loading:Boolean=false,val position:Long=0,val duration:Long=0,val error:String?=null,val title:String="",val sourceUrl:String?=null)
 object AudioPlayback { var state by mutableStateOf(AudioStatus()); internal set }
 
 class SoundService:Service(){
@@ -38,6 +38,7 @@ class SoundService:Service(){
     override fun onBind(intent:Intent?)=null
     override fun onCreate(){
         super.onCreate()
+        activeService=this
         audio=getSystemService(AudioManager::class.java)
         focusRequest=AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).setAudioAttributes(attributes)
             .setOnAudioFocusChangeListener({change->
@@ -55,6 +56,8 @@ class SoundService:Service(){
                 override fun onPause(){pausePlayback()}
                 override fun onStop(){stopSelf()}
                 override fun onSeekTo(pos:Long){seek(pos)}
+                override fun onRewind(){jump(-30_000)}
+                override fun onFastForward(){jump(30_000)}
                 override fun onSkipToNext(){skip(1)}
                 override fun onSkipToPrevious(){skip(-1)}
             },handler)
@@ -63,10 +66,17 @@ class SoundService:Service(){
         handler.post(pulse)
     }
     override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int {
+        if(intent?.action=="play_podcast" && (intent.getIntExtra("podcast_request",-1)!=podcastGeneration ||
+                intent.getStringExtra("podcast_owner")!=AccountData.uid(this))) {
+            if(player==null)stopSelf()
+            return START_NOT_STICKY
+        }
         when(intent?.action){
             "stop"->{stopSelf();return START_NOT_STICKY}
             "pause"->{pausePlayback();return START_NOT_STICKY}
             "seek"->{seek(intent.getLongExtra("position",0));return START_NOT_STICKY}
+            "rewind"->{jump(-30_000);return START_NOT_STICKY}
+            "forward"->{jump(30_000);return START_NOT_STICKY}
             "volume"->{applyVolume();if(player==null)stopSelf();return START_NOT_STICKY}
         }
         // Must enter the foreground before requesting audio focus on Android 15.
@@ -110,7 +120,7 @@ class SoundService:Service(){
                 if(player===it){prepared=true;it.isLooping=true;if(playWhenReady)playPrepared() else {publish();updateNotification()}}
             }
             p.setOnSeekCompleteListener{publish();updateSession()}
-            p.setOnErrorListener{_,_,_->fail("This file cannot be played. Choose another audio file.");true}
+            p.setOnErrorListener{current,_,_->if(player===current)fail("This file cannot be played. Choose another audio file.");true}
             p.prepareAsync()
         }catch(_:Exception){fail("Could not open this audio. Try importing it again.")}
     }
@@ -120,7 +130,7 @@ class SoundService:Service(){
         podcastUrl=url
         podcastTitle=title
         playWhenReady=true
-        AudioPlayback.state=AudioStatus(id="podcast",loading=true)
+        AudioPlayback.state=AudioStatus(id="podcast",loading=true,title=title,sourceUrl=url)
         updateNotification()
         try{
             val p=MediaPlayer()
@@ -134,7 +144,7 @@ class SoundService:Service(){
             }
             p.setOnCompletionListener{ if(player===it)stopSelf() }
             p.setOnSeekCompleteListener{publish();updateSession()}
-            p.setOnErrorListener{_,_,_->fail("Unable to stream this episode. Choose another HTTPS podcast.");true}
+            p.setOnErrorListener{current,_,_->if(player===current)fail("Unable to stream this episode. Choose another HTTPS podcast.");true}
             p.prepareAsync()
         }catch(_:Exception){fail("Could not open this podcast stream. Check your connection.")}
     }
@@ -167,8 +177,11 @@ class SoundService:Service(){
     private fun seek(position:Long){
         if(prepared)runCatching{player?.seekTo(position.coerceIn(0,(player?.duration?.toLong()?:0).coerceAtLeast(0)),MediaPlayer.SEEK_CLOSEST)}
     }
+    private fun jump(delta:Long){
+        if(prepared && podcastUrl!=null)seek((player?.currentPosition?.toLong()?:0L)+delta)
+    }
     private fun skip(direction:Int){
-        if(podcastUrl!=null)return
+        if(podcastUrl!=null){jump(direction*30_000L);return}
         val choices=AudioLibrary(this).all()
         val index=choices.indexOfFirst{it.id==track?.id}.coerceAtLeast(0)
         load(choices[(index+direction+choices.size)%choices.size])
@@ -176,14 +189,14 @@ class SoundService:Service(){
     private fun publish(){
         val p=player
         if(prepared && p!=null)runCatching{
-            AudioPlayback.state=AudioStatus(if(podcastUrl!=null)"podcast" else track?.id.orEmpty(),p.isPlaying,false,p.currentPosition.toLong(),p.duration.toLong())
+            AudioPlayback.state=AudioStatus(if(podcastUrl!=null)"podcast" else track?.id.orEmpty(),p.isPlaying,false,p.currentPosition.toLong(),p.duration.toLong(),title=podcastTitle?:track?.label.orEmpty(),sourceUrl=podcastUrl)
             updateSession()
         }
     }
     private fun updateSession(){
         val state=AudioPlayback.state
         val status=if(state.loading)PlaybackState.STATE_BUFFERING else if(state.playing)PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED
-        session.setPlaybackState(PlaybackState.Builder().setActions(PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_STOP or PlaybackState.ACTION_SEEK_TO or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS).setState(status,state.position,if(state.playing)1f else 0f).build())
+        session.setPlaybackState(PlaybackState.Builder().setActions(PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_STOP or PlaybackState.ACTION_SEEK_TO or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS or (if(podcastUrl!=null) PlaybackState.ACTION_REWIND or PlaybackState.ACTION_FAST_FORWARD else 0L)).setState(status,state.position,if(state.playing)1f else 0f).build())
     }
     private fun action(name:String):PendingIntent {
         val intent=Intent(this,SoundService::class.java).setAction(name)
@@ -200,13 +213,14 @@ class SoundService:Service(){
                 if(isPodcast)"Podcast streaming · focus session continues" else "Looping until your session ends"
                 else "Paused · resume when you’re ready")
             .setContentIntent(open).setOnlyAlertOnce(true).setOngoing(state.playing).setVisibility(Notification.VISIBILITY_PUBLIC)
-        if(!isPodcast)builder.addAction(Notification.Action.Builder(android.R.drawable.ic_media_previous,"Previous",action("previous")).build())
+        builder.addAction(Notification.Action.Builder(if(isPodcast)android.R.drawable.ic_media_rew else android.R.drawable.ic_media_previous,
+            if(isPodcast)"Back 30 seconds" else "Previous",action(if(isPodcast)"rewind" else "previous")).build())
         builder.addAction(Notification.Action.Builder(if(state.playing)android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,if(state.playing)"Pause" else "Play",action(if(state.playing)"pause" else "play")).build())
-        if(!isPodcast)builder.addAction(Notification.Action.Builder(android.R.drawable.ic_media_next,"Next",action("next")).build())
+        builder.addAction(Notification.Action.Builder(if(isPodcast)android.R.drawable.ic_media_ff else android.R.drawable.ic_media_next,
+            if(isPodcast)"Forward 30 seconds" else "Next",action(if(isPodcast)"forward" else "next")).build())
         builder.addAction(Notification.Action.Builder(android.R.drawable.ic_menu_close_clear_cancel,"Stop",action("stop")).build())
         val mediaStyle=Notification.MediaStyle().setMediaSession(session.sessionToken)
-        if(isPodcast)mediaStyle.setShowActionsInCompactView(0,1)
-        else mediaStyle.setShowActionsInCompactView(0,1,2)
+        mediaStyle.setShowActionsInCompactView(0,1,2)
         return builder.setStyle(mediaStyle).build()
     }
     private fun updateNotification(){
@@ -219,11 +233,37 @@ class SoundService:Service(){
         if(prepared)runCatching{player?.setVolume(volume,volume)}
     }
     private fun fail(message:String){
-        AudioPlayback.state=AudioStatus(id=track?.id.orEmpty(),error=message)
+        AudioPlayback.state=AudioStatus(id=if(podcastUrl!=null)"podcast" else track?.id.orEmpty(),error=message,title=podcastTitle?:track?.label.orEmpty(),sourceUrl=podcastUrl)
         stopSelf()
     }
     private fun releasePlayer(){prepared=false;runCatching{player?.release()};player=null;resumeOnGain=false}
+    companion object {
+        private var activeService:SoundService?=null
+        private var podcastGeneration=0
+        internal fun playPodcast(context:Context,episode:PodcastEpisode) {
+            val request=++podcastGeneration
+            AudioPlayback.state=AudioStatus(id="podcast",loading=true,title=episode.title,sourceUrl=episode.audioUrl)
+            try {
+                context.startForegroundService(Intent(context,SoundService::class.java).setAction("play_podcast")
+                    .putExtra("podcast_url",episode.audioUrl).putExtra("podcast_title",episode.title)
+                    .putExtra("podcast_request",request).putExtra("podcast_owner",AccountData.uid(context)))
+            } catch(problem:Exception) { AudioPlayback.state=AudioStatus(); throw problem }
+        }
+        internal fun clearPodcast(context:Context) {
+            podcastGeneration++
+            val service=activeService
+            if(service?.podcastUrl!=null) {
+                service.releasePlayer();service.podcastUrl=null;service.podcastTitle=null
+                AudioPlayback.state=AudioStatus();service.stopSelf()
+            } else if(AudioPlayback.state.id=="podcast") {
+                AudioPlayback.state=AudioStatus()
+                if(service==null)context.stopService(Intent(context,SoundService::class.java)) else service.publish()
+            }
+        }
+    }
+
     override fun onDestroy(){
+        if(activeService===this)activeService=null
         handler.removeCallbacksAndMessages(null)
         releasePlayer()
         audio.abandonAudioFocusRequest(focusRequest)

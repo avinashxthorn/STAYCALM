@@ -13,3 +13,10 @@
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
+
+# Permanent signing keys are stored only in private backups and GitHub Actions secrets.
+*.p12
+*.jks
+*.keystore
+*keystore-password*
+*private-signing*

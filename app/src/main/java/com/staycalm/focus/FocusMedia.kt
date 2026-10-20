@@ -7,7 +7,6 @@ import java.net.URI
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.util.Xml
 import android.view.ViewGroup
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -24,12 +23,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.xmlpull.v1.XmlPullParser
-import java.net.URL
-import javax.net.ssl.HttpsURLConnection
 import java.lang.ref.WeakReference
 
 /**
@@ -65,61 +65,6 @@ internal object StudyMediaLinks {
             uri.host.equals("localhost", true) || uri.host == "127.0.0.1")
             return null
         return uri.toASCIIString()
-    }
-}
-
-internal data class PodcastEpisode(val title: String, val audioUrl: String)
-
-/** On-demand public RSS audio enclosures. Only HTTPS podcast feeds/audio; no scraping YouTube. */
-internal object PodcastFeeds {
-    fun load(feed: String): List<PodcastEpisode> {
-        val link = StudyMediaLinks.secureAudioUrl(feed) ?: error("Enter a valid HTTPS podcast RSS link.")
-        val conn = URL(link).openConnection() as HttpsURLConnection
-        conn.connectTimeout = 12_000
-        conn.readTimeout = 12_000
-        conn.instanceFollowRedirects = false
-        conn.setRequestProperty("Accept", "application/rss+xml, application/atom+xml, application/xml, text/xml")
-        try {
-            val episodes = mutableListOf<PodcastEpisode>()
-            conn.inputStream.use { stream ->
-                val parser = Xml.newPullParser()
-                parser.setInput(stream, "UTF-8")
-                var inside = false
-                var depth = 0
-                var title = ""
-                var enclosure: String? = null
-                var event = parser.eventType
-                while (event != XmlPullParser.END_DOCUMENT && episodes.size < 20) {
-                    if (event == XmlPullParser.START_TAG) {
-                        when (parser.name.substringAfter(':').lowercase()) {
-                            "item", "entry" -> {
-                                inside = true; depth = parser.depth
-                                title = ""; enclosure = null
-                            }
-                            "title" -> if (inside && parser.depth == depth + 1)
-                                title = parser.nextText().take(120)
-                            "enclosure", "content", "link" -> if (inside) {
-                                val url = parser.getAttributeValue(null, "url")
-                                    ?: parser.getAttributeValue(null, "href")
-                                val mime = parser.getAttributeValue(null, "type").orEmpty()
-                                val rel = parser.getAttributeValue(null, "rel").orEmpty()
-                                if ((mime.startsWith("audio/") || parser.name == "enclosure" ||
-                                    rel == "enclosure") && url != null)
-                                    enclosure = StudyMediaLinks.secureAudioUrl(url)
-                            }
-                        }
-                    } else if (event == XmlPullParser.END_TAG &&
-                        inside && parser.depth == depth &&
-                        parser.name.substringAfter(':').lowercase() in listOf("item", "entry")) {
-                        if (!enclosure.isNullOrBlank())
-                            episodes.add(PodcastEpisode(title.ifBlank { "Podcast episode" }, enclosure!!))
-                        inside = false
-                    }
-                    event = parser.next()
-                }
-            }
-            return episodes
-        } finally { conn.disconnect() }
     }
 }
 
@@ -159,7 +104,8 @@ internal object StudyVideoVisibility {
 internal fun FocusMediaHub(
     focusMode: Boolean,
     sessionActive: Boolean,
-    onOpenMiniYouTube: () -> Unit
+    onOpenMiniYouTube: () -> Unit,
+    loadFeed: suspend (String) -> PodcastFeedPage = { withContext(Dispatchers.IO) { PodcastFeeds.load(it) } }
 ) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("study_media_${AccountData.root(context).name}", Context.MODE_PRIVATE) }
@@ -170,15 +116,43 @@ internal fun FocusMediaHub(
     var episodes by remember { mutableStateOf<List<PodcastEpisode>>(emptyList()) }
     var feedError by remember { mutableStateOf<String?>(null) }
     var fetching by remember { mutableStateOf(false) }
+    var visibleCount by remember { mutableIntStateOf(10) }
+    var nextFeed by remember { mutableStateOf<String?>(null) }
+    var seenFeeds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var requestVersion by remember { mutableIntStateOf(0) }
+    var fetchJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
     val audio = AudioPlayback.state
     fun playPodcast(episode: PodcastEpisode) {
-        val intent = Intent(context, SoundService::class.java)
-            .setAction("play_podcast")
-            .putExtra("podcast_url", episode.audioUrl)
-            .putExtra("podcast_title", episode.title)
-        runCatching { context.startForegroundService(intent) }
+        runCatching { SoundService.playPodcast(context, episode) }
             .onFailure { feedError = "Android could not start podcast playback. Try again." }
+    }
+    fun resetResults() {
+        requestVersion++; fetchJob?.cancel(); fetchJob = null
+        fetching = false; feedError = null; episodes = emptyList()
+        nextFeed = null; seenFeeds = emptySet(); visibleCount = 10
+    }
+    fun findEpisodes(more: Boolean = false) {
+        val link = if (more) nextFeed ?: return else feedText.trim()
+        if (!more) resetResults()
+        val version = ++requestVersion
+        fetching = true; feedError = null
+        prefs.edit().putString("rss_link", feedText.trim()).apply()
+        fetchJob = scope.launch {
+            try {
+                val page = loadFeed(link)
+                if (version == requestVersion) {
+                    seenFeeds = seenFeeds + link
+                    episodes = (if (more) episodes + page.episodes else page.episodes).distinctBy { it.audioUrl }
+                    nextFeed = page.nextUrl?.takeUnless { it in seenFeeds }
+                    visibleCount = if (more) (visibleCount + 10).coerceAtMost(episodes.size) else 10
+                    if (episodes.isEmpty() && nextFeed == null) feedError = "No public HTTPS audio episodes were found in this feed."
+                }
+            } catch (problem: Exception) {
+                if (problem is CancellationException) throw problem
+                if (version == requestVersion) feedError = "Could not read that RSS feed. Check the link and your connection."
+            } finally { if (version == requestVersion) fetching = false }
+        }
     }
 
     Surface(shape = RoundedCornerShape(24.dp),
@@ -208,10 +182,15 @@ internal fun FocusMediaHub(
                 fontSize = 11.sp, color = mutedInk)
             OutlinedTextField(
                 value = youtubeText,
-                onValueChange = { youtubeText = it.take(400) },
+                onValueChange = { youtubeText = it.take(400); videoError = null; playingId = null },
                 label = { Text("Paste a YouTube video or podcast link") },
-                singleLine = true, modifier = Modifier.fillMaxWidth()
+                singleLine = true, modifier = Modifier.fillMaxWidth().testTag("youtube-link")
             )
+            TextButton(onClick = {
+                youtubeText = ""; playingId = null; videoError = null
+                prefs.edit().remove("youtube_link").apply()
+                AccountData.preferences(context).edit().remove("youtube_link").apply()
+            }, modifier = Modifier.testTag("clear-youtube")) { Text("Clear link") }
             Button(
                 enabled = youtubeText.isNotBlank(),
                 onClick = {
@@ -280,24 +259,21 @@ internal fun FocusMediaHub(
             Text("For listening with the screen locked, paste a public podcast RSS feed. Podcast audio uses its publisher's HTTPS enclosure—not YouTube audio.",
                 fontSize = 12.sp, color = mutedInk)
             OutlinedTextField(
-                value = feedText, onValueChange = { feedText = it.take(700) },
+                value = feedText, onValueChange = { if (it != feedText) resetResults(); feedText = it.take(700) },
                 label = { Text("Podcast RSS feed (https://…)") },
-                singleLine = true, modifier = Modifier.fillMaxWidth()
+                singleLine = true, modifier = Modifier.fillMaxWidth().testTag("rss-link")
             )
-            OutlinedButton(enabled = !fetching && feedText.isNotBlank(), onClick = {
-                fetching = true; feedError = null; episodes = emptyList()
-                prefs.edit().putString("rss_link", feedText).apply()
-                scope.launch {
-                    try {
-                        episodes = withContext(Dispatchers.IO) { PodcastFeeds.load(feedText) }
-                        if (episodes.isEmpty()) feedError = "No public HTTPS audio episodes were found in this feed."
-                    } catch (_: Exception) {
-                        feedError = "Could not read that RSS feed. Check the link and your connection."
-                    } finally { fetching = false }
-                }
-            }) { Text(if (fetching) "Loading episodes…" else "Find episodes") }
+            TextButton(onClick = {
+                resetResults(); feedText = ""
+                prefs.edit().remove("rss_link").apply()
+                AccountData.preferences(context).edit().remove("rss_link").apply()
+                SoundService.clearPodcast(context)
+            }, modifier = Modifier.testTag("clear-rss")) { Text("Clear link") }
+            OutlinedButton(enabled = !fetching && feedText.isNotBlank(), onClick = { findEpisodes() }) {
+                Text(if (fetching) "Loading episodes…" else "Find episodes")
+            }
             if (feedError != null) Text(feedError.orEmpty(), fontSize = 12.sp, color = roseInk)
-            episodes.forEach { episode ->
+            episodes.take(visibleCount).forEach { episode ->
                 Row(Modifier.fillMaxWidth().clickable { playPodcast(episode) }.padding(vertical = 7.dp)) {
                     Icon(Icons.Rounded.Headphones, null, tint = roseInk)
                     Spacer(Modifier.width(10.dp))
@@ -306,19 +282,18 @@ internal fun FocusMediaHub(
                     Icon(Icons.Rounded.PlayArrow, "Play ${episode.title}", tint = roseInk)
                 }
             }
-            if (audio.id == "podcast") {
-                Text(if (audio.loading) "Loading podcast…" else if (audio.playing)
-                    "Podcast playing in the background" else "Podcast paused",
-                    color = roseInk, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                if (audio.error != null) Text(audio.error, color = roseInk, fontSize = 12.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    TextButton(onClick = {
-                        val action = if (audio.playing) "pause" else "play"
-                        context.startService(Intent(context, SoundService::class.java).setAction(action))
-                    }) { Text(if (audio.playing) "Pause podcast" else "Resume podcast") }
-                    TextButton(onClick = {
-                        context.startService(Intent(context, SoundService::class.java).setAction("stop"))
-                    }) { Text("Stop") }
+            if (visibleCount < episodes.size || nextFeed != null) {
+                OutlinedButton(enabled = !fetching, onClick = {
+                    if (visibleCount < episodes.size) visibleCount = (visibleCount + 10).coerceAtMost(episodes.size)
+                    else findEpisodes(more = true)
+                }, modifier = Modifier.testTag("more-episodes")) { Text(if (fetching) "Loading episodes…" else "Show more") }
+            }
+            if (audio.id == "podcast") PodcastPlayerControls(audio) { command, position ->
+                if (command == "stop") SoundService.clearPodcast(context)
+                else {
+                    val intent = Intent(context, SoundService::class.java).setAction(command)
+                    position?.let { intent.putExtra("position", it) }
+                    if (command == "play") context.startForegroundService(intent) else context.startService(intent)
                 }
             }
             if (!focusMode || !sessionActive)
@@ -326,4 +301,37 @@ internal fun FocusMediaHub(
                     fontSize = 11.sp, color = mutedInk)
         }
     }
+}
+
+@Composable
+internal fun PodcastPlayerControls(audio: AudioStatus, onCommand: (String, Long?) -> Unit) {
+    Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.primaryContainer,
+        modifier = Modifier.fillMaxWidth().testTag("podcast-player")) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("NOW PLAYING", style = MaterialTheme.typography.labelSmall)
+            Text(audio.title.ifBlank { "Podcast episode" }, fontWeight = FontWeight.Bold)
+            Text(if (audio.loading) "Loading podcast…" else if (audio.playing) "Playing · background audio" else "Paused",
+                style = MaterialTheme.typography.bodySmall)
+            audio.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            if (audio.duration > 0) {
+                Slider(value = audio.position.toFloat().coerceIn(0f, audio.duration.toFloat()),
+                    onValueChange = { onCommand("seek", it.toLong()) }, valueRange = 0f..audio.duration.toFloat(), enabled = !audio.loading)
+                Text("${podcastTime(audio.position)} / ${podcastTime(audio.duration)}", style = MaterialTheme.typography.bodySmall)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { onCommand("rewind", null) }, enabled = !audio.loading) { Icon(Icons.Rounded.Replay30, "Back 30 seconds") }
+                IconButton(onClick = { onCommand(if (audio.playing) "pause" else "play", null) }, enabled = !audio.loading) {
+                    Icon(if (audio.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (audio.playing) "Pause podcast" else "Resume podcast")
+                }
+                IconButton(onClick = { onCommand("forward", null) }, enabled = !audio.loading) { Icon(Icons.Rounded.Forward30, "Forward 30 seconds") }
+                IconButton(onClick = { onCommand("stop", null) }) { Icon(Icons.Rounded.Stop, "Stop podcast") }
+            }
+        }
+    }
+}
+
+private fun podcastTime(milliseconds: Long): String {
+    val seconds = milliseconds.coerceAtLeast(0) / 1000
+    return if (seconds >= 3600) "%d:%02d:%02d".format(seconds / 3600, seconds / 60 % 60, seconds % 60)
+        else "%d:%02d".format(seconds / 60, seconds % 60)
 }
