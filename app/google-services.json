@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "987571397697",
+    "project_id": "staycalm-aefb7",
+    "storage_bucket": "staycalm-aefb7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:987571397697:android:b84db6988843c5006412c0",
+        "android_client_info": {
+          "package_name": "com.staycalm.focus"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBJ2n6ANk8oa-Q6Fmt07esXnk3j9HuetlQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
