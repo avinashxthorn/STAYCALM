@@ -104,3 +104,16 @@ No finite set of checks can guarantee an app has no defects on every Android dev
 - PDFs and imported audio are explicitly excluded from cloud; full ZIP round trip preserves them.
 - Invalid/truncated/path-traversing ZIP and future/oversized JSON fail before replacing preferences.
 - Never uninstall an existing build just to bypass a debug signing mismatch.
+
+
+## Version 3.9 login and planner cloud files
+- Fresh install: no login button appears above slides; three pages and Get started lead to simple email/password login.
+- Login/Sign up changes only the short auth form. No export/restore controls appear before authentication.
+- Verified login on an empty fresh install recovers latest profile, planner, history and cloud attachment bytes before home.
+- Interrupted fresh-install recovery remains retryable after restarting the Activity. Existing local work is never silently replaced.
+- Profile and account manager show Login successful and the signed-in email.
+- Update Firebase rules, sync an existing PDF, remove the source local file in a test installation, and recover identical bytes from the cloud.
+- Partial chunks/checksum failure never become a successful backup or replace existing planner/preferences.
+- Upload retries resume after the last atomic eight-chunk checkpoint. Complete files skip subsequent byte writes.
+- Verify cross-account and unverified access to file manifests and bytes is denied.
+- Confirm all limits are explicit; Spark quota failures retain local data and show pending sync.

@@ -10,6 +10,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.Source
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.sync.withLock
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -27,7 +28,7 @@ object CloudBackup {
     private lateinit var data: SharedPreferences
     // A strong reference is required: SharedPreferences holds listeners weakly.
     private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key in BackupSnapshot.keys) schedule()
+        if (key in BackupSnapshot.keys || key == "study_attachments") schedule()
     }
     fun initialize(context: Context) {
         app = context.applicationContext
@@ -44,9 +45,28 @@ object CloudBackup {
     fun deviceId(): String = meta.getString("device", null) ?: UUID.randomUUID().toString().also {
         check(meta.edit().putString("device", it).commit())
     }
-    fun payload(): String = BackupSnapshot.encode(data.all + mapOf(
+    fun payload(): String = org.json.JSONObject(BackupSnapshot.encode(data.all + mapOf(
         "plans" to (data.getString("plans", "[]") ?: "[]"),
-        "logs" to (data.getString("logs", "[]") ?: "[]")))
+        "logs" to (data.getString("logs", "[]") ?: "[]"))))
+        .put("plannerFiles", org.json.JSONArray(data.getString("study_attachments", "[]") ?: "[]")).toString()
+    fun progress(message: String) { meta.edit().putString("status", message).apply() }
+    fun errorMessage(error: Exception): String = if (error is com.google.firebase.firestore.FirebaseFirestoreException &&
+        error.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED)
+        "Cloud access was denied. Publish the updated STAYCALM firestore.rules and verify your email"
+        else error.localizedMessage ?: "Check your connection and try again"
+    suspend fun restoreCloud(copy: CloudCopy) {
+        val uid = auth().currentUser?.uid ?: error("Sign in first.")
+        CloudPlannerFiles(app).restore(uid, copy.payload, ::progress)
+    }
+    suspend fun recoverAfterLogin(): Boolean {
+        // A first login on a fresh installation can safely recover without replacing local work.
+        if (!auth().currentUser!!.isEmailVerified || Personalization(app).isReady() ||
+            FocusStore(app).tasks().isNotEmpty() || FocusStore(app).logs().isNotEmpty() || StudyJournal(app).all().isNotEmpty()) return false
+        val latest = copies().firstOrNull() ?: return false
+        restoreCloud(latest)
+        enable()
+        return true
+    }
     fun enable() {
         val user = auth().currentUser ?: error("Sign in first.")
         require(user.isEmailVerified) { "Verify your email first, then tap Check verification." }
@@ -75,13 +95,20 @@ object CloudBackup {
     }
     private fun hash(payload: String) = MessageDigest.getInstance("SHA-256").digest(payload.toByteArray()).joinToString("") { "%02x".format(it) }
     fun needsUpload() = hash(payload()) != meta.getString("hash", null)
-    suspend fun upload(expectedUid: String, force: Boolean = false) {
+    private val uploadMutex = kotlinx.coroutines.sync.Mutex()
+    suspend fun upload(expectedUid: String, force: Boolean = false) = uploadMutex.withLock {
+        performUpload(expectedUid, force)
+    }
+    private suspend fun performUpload(expectedUid: String, force: Boolean) {
         val user = auth().currentUser ?: error("Sign in to back up.")
         require(enabled() && user.uid == expectedUid && user.isEmailVerified) { "Cloud backup is not enabled for this account." }
         val snapshotString = payload()
         BackupSnapshot.decode(snapshotString)
         val hash = hash(snapshotString)
         if (!force && hash == meta.getString("hash", null)) return
+        val files = PlannerManifest.parse(org.json.JSONObject(snapshotString).getJSONArray("plannerFiles"))
+        CloudPlannerFiles(app).upload(expectedUid, files, ::progress)
+        require(enabled() && auth().currentUser?.uid == expectedUid) { "Cloud sync stopped because the account changed." }
         val ref = FirebaseFirestore.getInstance().collection("users").document(user.uid).collection("backups").document(deviceId())
         try { kotlinx.coroutines.withTimeout(30_000) { ref.set(mapOf("schema" to 1, "payload" to snapshotString, "label" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".take(100),
             "updatedAt" to FieldValue.serverTimestamp())).await() } }
@@ -140,8 +167,8 @@ class CloudBackupWorker(context: Context, params: WorkerParameters) : CoroutineW
             if (CloudBackup.enabled() && CloudBackup.needsUpload()) Result.retry() else Result.success()
         }
         catch (error: Exception) {
-            if (error is kotlinx.coroutines.CancellationException) throw error
-            CloudBackup.failure(error.localizedMessage ?: "Check internet and Firebase setup")
+            if (error is kotlinx.coroutines.CancellationException && error !is kotlinx.coroutines.TimeoutCancellationException) throw error
+            CloudBackup.failure(CloudBackup.errorMessage(error))
             if (error is IllegalArgumentException) Result.failure() else Result.retry()
         }
     }
