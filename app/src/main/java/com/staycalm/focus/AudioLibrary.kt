@@ -20,13 +20,13 @@ object Ambients {
 }
 
 class AudioLibrary(private val context:Context){
-    private val prefs=context.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE)
+    private val prefs=AccountData.preferences(context)
     fun imported():List<Ambient> = runCatching{
         val array=JSONArray(prefs.getString("imported_audio","[]"))
         (0 until array.length()).map{index->
             val item=array.getJSONObject(index)
             Ambient(item.getString("id"),item.getString("title"),"Your audio · loops during focus",localFile=item.getString("file"))
-        }.filter{File(context.filesDir,"audio/${it.localFile}").isFile}
+        }.filter{File(AccountData.root(context),"audio/${it.localFile}").isFile}
     }.getOrDefault(emptyList())
     fun all():List<Ambient> = Ambients.all+imported()
     fun find(id:String):Ambient = all().firstOrNull{it.id==id}?:Ambients.all.first()
@@ -39,7 +39,7 @@ class AudioLibrary(private val context:Context){
             if(cursor.moveToFirst())cursor.getString(0) else null
         }}.getOrNull()?.take(120)?.ifBlank{null}?:"My audio"
         val id="personal_"+UUID.randomUUID().toString().replace("-","")
-        val folder=File(context.filesDir,"audio").apply{mkdirs()}
+        val folder=File(AccountData.root(context),"audio").apply{mkdirs()}
         val file=File(folder,"$id.audio")
         try {
             context.contentResolver.openInputStream(uri)?.use{input->file.outputStream().use{output->input.copyTo(output)}}?:error("This file could not be opened.")
@@ -57,6 +57,6 @@ class AudioLibrary(private val context:Context){
     fun remove(item:Ambient){
         if(item.localFile==null)return
         save(imported().filterNot{it.id==item.id})
-        File(context.filesDir,"audio/${item.localFile}").delete()
+        File(AccountData.root(context),"audio/${item.localFile}").delete()
     }
 }

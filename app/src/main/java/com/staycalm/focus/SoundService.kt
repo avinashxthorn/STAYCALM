@@ -104,7 +104,7 @@ class SoundService:Service(){
             p.setAudioAttributes(attributes)
             p.setWakeMode(this,PowerManager.PARTIAL_WAKE_LOCK)
             p.isLooping=true
-            if(selected.localFile!=null){p.setDataSource(File(filesDir,"audio/${selected.localFile}").absolutePath)}
+            if(selected.localFile!=null){p.setDataSource(File(AccountData.root(this),"audio/${selected.localFile}").absolutePath)}
             else resources.openRawResourceFd(selected.raw).use{p.setDataSource(it.fileDescriptor,it.startOffset,it.length)}
             p.setOnPreparedListener{
                 if(player===it){prepared=true;it.isLooping=true;if(playWhenReady)playPrepared() else {publish();updateNotification()}}

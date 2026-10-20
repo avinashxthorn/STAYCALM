@@ -84,7 +84,7 @@ jobs:
             gh release create "$TAG" \
               dist/STAYCALM.apk dist/STAYCALM.apk.sha256 \
               --target "${GITHUB_SHA}" \
-              --title "STAYCALM 3.9.0 - Simple login and cloud planner files APK (build ${GITHUB_RUN_NUMBER})" \
+              --title "STAYCALM 4.0.0 - Private accounts and history recovery APK (build ${GITHUB_RUN_NUMBER})" \
               --notes "Download STAYCALM.apk directly (do not download Source code ZIP or an Actions artifact). This debug-signed APK passed unit tests, lint, archive integrity, package and Android signature checks. GitHub runners may produce different debug certificates; installing over an old STAYCALM may fail with a signature mismatch. Do not uninstall without preserving important local data." \
               --latest
           fi

@@ -19,7 +19,7 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
 @Composable
-fun AccountScreen(context: Context, onClose: () -> Unit, onRestored: () -> Unit, onSignedIn: (Boolean) -> Unit = {}, welcome: Boolean = false) {
+fun AccountScreen(context: Context, onClose: () -> Unit, onRestored: () -> Unit, onSignedIn: (Boolean) -> Unit = {}, welcome: Boolean = false, onSignedOut: () -> Unit = {}) {
     var refresh by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) { while (true) { delay(2000); refresh++ } }
     val user = remember(refresh) { if (CloudBackup.ready()) CloudBackup.auth().currentUser else null }
@@ -85,9 +85,9 @@ fun AccountScreen(context: Context, onClose: () -> Unit, onRestored: () -> Unit,
                 Text("Cloud sync", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text(CloudBackup.status())
                 if (CloudBackup.enabled() && CloudBackup.needsUpload()) Text("New changes are waiting to upload.", style = MaterialTheme.typography.bodySmall)
-                Text("Plans, progress and planner files recover with your account.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Plans, completed session history, insights, rewards and planner files recover with your account.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Button(onClick = {
-                    if (CloudBackup.enabled()) runAction { CloudBackup.upload(user.uid, force = true); message = "Synced successfully, including planner files." }
+                    if (CloudBackup.enabled()) runAction { CloudBackup.upload(user.uid, force = true); message = "Synced successfully: session history, insights, plans and planner files." }
                     else consent = true
                 }, enabled = !busy, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp)) {
                     Text(if (CloudBackup.enabled()) "Sync now" else "Enable cloud sync")
@@ -113,7 +113,10 @@ fun AccountScreen(context: Context, onClose: () -> Unit, onRestored: () -> Unit,
                 OutlinedButton(onClick = { importConfirm = true }, enabled = !busy) { Text("Restore from backup file") }
                 if (CloudBackup.enabled()) TextButton(onClick = { CloudBackup.disable(); refresh++ }, enabled = !busy) { Text("Turn off automatic sync") }
             }
-            TextButton(onClick = { logout = true }, enabled = !busy) { Text("Log out") }
+            TextButton(onClick = {
+                if (SessionUninstallGuard.unfinished(FocusStore(context).state())) message = "Finish or end your current session before logging out."
+                else logout = true
+            }, enabled = !busy) { Text("Log out") }
         }
     }
     if (consent) AlertDialog(onDismissRequest = { consent = false }, title = { Text("Enable cloud sync?") },
@@ -125,9 +128,22 @@ fun AccountScreen(context: Context, onClose: () -> Unit, onRestored: () -> Unit,
         confirmButton = { TextButton(onClick = { selected = null; runAction { CloudBackup.restoreCloud(copy); CloudBackup.enable(); onRestored() } }) { Text("Restore") } },
         dismissButton = { TextButton(onClick = { selected = null }) { Text("Cancel") } }) }
     if (logout) AlertDialog(onDismissRequest = { logout = false }, title = { Text("Log out?") },
-        text = { Text("Sync important changes first. Local data stays on this phone and automatic sync stops.") },
-        confirmButton = { TextButton(onClick = { CloudBackup.signOut(); logout = false; copies = null; showLogin = true; refresh++ }) { Text("Log out") } },
-        dismissButton = { TextButton(onClick = { logout = false }) { Text("Cancel") } })
+        text = { Text("Your files, session history and insights will be hidden until you log in again. Your private account copy stays on this phone. Sync first to recover new changes on another phone.") },
+        confirmButton = { TextButton(onClick = {
+            val syncFirst = CloudBackup.enabled() && CloudBackup.needsUpload()
+            logout = false
+            runAction {
+                if (syncFirst) CloudBackup.upload(user.uid, force = true)
+                CloudBackup.signOut(); copies = null; showLogin = true; onSignedOut()
+            }
+        }) { Text(if (CloudBackup.enabled() && CloudBackup.needsUpload()) "Sync and log out" else "Log out") } },
+        dismissButton = { Row {
+            if (CloudBackup.enabled() && CloudBackup.needsUpload()) TextButton(onClick = {
+                logout = false
+                runAction { CloudBackup.signOut(); copies = null; showLogin = true; onSignedOut() }
+            }) { Text("Log out without syncing") }
+            TextButton(onClick = { logout = false }) { Text("Cancel") }
+        } })
     if (importConfirm) AlertDialog(onDismissRequest = { importConfirm = false }, title = { Text("Restore a file backup?") },
         text = { Text("This replaces current plans, progress and file lists. Export current data first if you want to keep it.") },
         confirmButton = { TextButton(onClick = { importConfirm = false; importBackup.launch(arrayOf("application/zip", "application/octet-stream")) }) { Text("Choose file") } },

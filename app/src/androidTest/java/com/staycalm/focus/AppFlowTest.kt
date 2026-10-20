@@ -20,12 +20,16 @@ class AppFlowTest {
     @get:Rule(order=1) val ui=createAndroidComposeRule<MainActivity>()
     @Before fun reset(){
         ui.runOnUiThread{
+            (ui.activity.application as AccountTestApplication).identity = "ui-test"
+            AccountData.finishLogin(ui.activity)
+            AccountData.navigation(ui.activity).edit().putBoolean("intro_done", true).commit()
+            CloudBackup.bindAccount()
             ui.activity.stopService(android.content.Intent(ui.activity,SoundService::class.java))
             ui.activity.stopService(android.content.Intent(ui.activity,TimerService::class.java))
             Notice.sessionStopped(ui.activity)
             // UI tests run without the user-granted Usage Access / overlay permissions.
             // Opt out in the fixture; blocker permission gating is tested separately.
-            ui.activity.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE).edit()
+            AccountData.preferences(ui.activity).edit()
                 .clear().putBoolean("block_distracting_apps",false).commit()
             SessionUninstallGuard.releaseIfIdle(ui.activity)
             Personalization(ui.activity).saveProfile("Test Student","Veterinary medicine")
@@ -56,6 +60,99 @@ class AppFlowTest {
         ui.onNodeWithText("Export full backup").assertDoesNotExist()
         screenshot("11-account-backup")
     }
+    @Test fun logoutHidesPrivateFilesInsightsAndHistoryAcrossRestart() {
+        val context = ui.activity
+        val store = FocusStore(context)
+        store.addTask("Private planner entry", LocalDate.now().toString(), "12:00", 25, false)
+        val source = android.net.Uri.parse("android.resource://${context.packageName}/${Ambients.all.first().raw}")
+        val file = StudyJournal(context).import(LocalDate.now(), source)
+        ui.onNodeWithText("Insights").performClick()
+        ui.onNodeWithText("Every minute matters.").assertIsDisplayed()
+        ui.runOnUiThread {
+            CloudBackup.signOut()
+            (ui.activity.application as AccountTestApplication).identity = null
+            CloudBackup.bindAccount()
+        }
+        ui.activityRule.scenario.recreate()
+        ui.onNodeWithText("Welcome back").assertIsDisplayed()
+        ui.onNodeWithText("Insights").assertDoesNotExist()
+        ui.onNodeWithText("Planner").assertDoesNotExist()
+        ui.onNodeWithText("Private planner entry").assertDoesNotExist()
+        assertTrue(FocusStore(context).logs().isEmpty())
+        assertTrue(StudyJournal(context).all().isEmpty())
+        ui.activityRule.scenario.recreate()
+        ui.onNodeWithText("Welcome back").assertIsDisplayed()
+        ui.onNodeWithText("← Back").performClick()
+        ui.onNodeWithText("Find your focus.").assertIsDisplayed()
+        ui.onNodeWithText("Insights").assertDoesNotExist()
+        // Local copies remain recoverable only after returning to their account.
+        ui.runOnUiThread {
+            (ui.activity.application as AccountTestApplication).identity = "ui-test"
+            AccountData.finishLogin(context); CloudBackup.bindAccount()
+        }
+        ui.activityRule.scenario.recreate()
+        assertTrue(FocusStore(context).tasks().any { it.title == "Private planner entry" })
+        assertTrue(StudyJournal(context).all().any { it.id == file.id })
+        StudyJournal(context).remove(file)
+    }
+    @Test fun differentAccountsHaveSeparateFilesPreferencesAndBackupStatus() {
+        val context = ui.activity
+        val app = context.application as AccountTestApplication
+        val source = android.net.Uri.parse("android.resource://${context.packageName}/${Ambients.all.first().raw}")
+        val firstRoot = AccountData.root(context)
+        val file = StudyJournal(context).import(LocalDate.now(), source)
+        FocusStore(context).addTask("Only account A", LocalDate.now().toString(), "12:00", 25, false)
+        AccountData.metadata(context).edit().putString("status", "Private account A status").commit()
+        ui.runOnUiThread { app.identity = "account-b"; CloudBackup.bindAccount() }
+        assertNotEquals(firstRoot, AccountData.root(context))
+        assertTrue(FocusStore(context).tasks().isEmpty())
+        assertTrue(FocusStore(context).logs().isEmpty())
+        assertTrue(StudyJournal(context).all().isEmpty())
+        assertFalse(Personalization(context).isReady())
+        assertFalse(CloudBackup.status().contains("account A"))
+        assertFalse(File(AccountData.root(context), "journal/${file.id}").exists())
+        Personalization(context).saveProfile("Account B", "Biology")
+        ui.activityRule.scenario.recreate()
+        ui.onNodeWithText("Settings").performClick()
+        ui.onNodeWithText("Your space, Account B").performScrollTo().assertIsDisplayed()
+        ui.runOnUiThread { app.identity = "ui-test"; CloudBackup.bindAccount() }
+        assertEquals("Test Student", Personalization(context).name())
+        assertTrue(FocusStore(context).tasks().any { it.title == "Only account A" })
+        assertTrue(StudyJournal(context).all().any { it.id == file.id })
+        StudyJournal(context).remove(file)
+    }
+    @Test fun completedHistoryBackupRestoresInsightInputsAndRewards() {
+        val context = ui.activity
+        val store = FocusStore(context)
+        store.configure(5); store.setIntention("History recovery"); store.start()
+        AccountData.preferences(context).edit().putLong("end_elapsed", SystemClock.elapsedRealtime()-100)
+            .putLong("end_wall", System.currentTimeMillis()-100).commit()
+        assertTrue(store.completeIfDue())
+        val original = store.logs()
+        val balance = store.rewardBalance()
+        val snapshot = CloudBackup.payload()
+        val values = BackupSnapshot.decode(snapshot)
+        assertTrue((values["logs"] as String).contains("History recovery"))
+        val editor = AccountData.preferences(context).edit()
+        BackupSnapshot.keys.forEach { editor.remove(it) }; editor.commit()
+        assertTrue(FocusStore(context).logs().isEmpty())
+        CloudBackup.restore(snapshot)
+        assertEquals(original, FocusStore(context).logs())
+        assertEquals(5, FocusStore(context).completedMinutes())
+        assertEquals(balance, FocusStore(context).rewardBalance())
+        ui.activityRule.scenario.recreate()
+        ui.onNodeWithText("Insights").performClick()
+        ui.onNodeWithText("Every minute matters.").assertIsDisplayed()
+        ui.onNodeWithText("History recovery").performScrollTo().assertIsDisplayed()
+    }
+    @Test fun logoutCannotAbandonAnUnfinishedSession() {
+        val store = FocusStore(ui.activity)
+        store.start()
+        try {
+            assertThrows(IllegalArgumentException::class.java) { CloudBackup.signOut() }
+            assertTrue(store.state().running)
+        } finally { store.abandon() }
+    }
     @Test fun fullBackupRestoresPlansJournalAndImportedAudio(){
         val context=ui.activity
         val store=FocusStore(context)
@@ -67,7 +164,7 @@ class AppFlowTest {
         try {
             LocalBackup.export(context,android.net.Uri.fromFile(zip))
             store.deleteTask(plan); StudyJournal(context).remove(attachment); AudioLibrary(context).remove(audio)
-            assertFalse(File(context.filesDir,"journal/${attachment.id}").exists())
+            assertFalse(File(AccountData.root(context),"journal/${attachment.id}").exists())
             LocalBackup.restore(context,android.net.Uri.fromFile(zip))
             assertTrue(FocusStore(context).tasks().any{it.id==plan.id})
             assertTrue(StudyJournal(context).all().any{it.id==attachment.id})
@@ -123,7 +220,7 @@ class AppFlowTest {
     @Test fun breaksDoNotCountAndCompletionIsIdempotent(){
         ui.runOnUiThread{
             val store=FocusStore(ui.activity)
-            val prefs=ui.activity.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE)
+            val prefs=AccountData.preferences(ui.activity)
             fun due(mode:String){
                 store.configure(5,mode=mode)
                 store.start()
@@ -166,7 +263,7 @@ class AppFlowTest {
         val library=AudioLibrary(context)
         val imported=library.import(android.net.Uri.parse("android.resource://${context.packageName}/${Ambients.all.first().raw}"))
         assertTrue(AudioLibrary(context).imported().any{it.id==imported.id})
-        assertTrue(File(context.filesDir,"audio/${imported.localFile}").length()>0)
+        assertTrue(File(AccountData.root(context),"audio/${imported.localFile}").length()>0)
         library.remove(imported)
         assertFalse(AudioLibrary(context).imported().any{it.id==imported.id})
     }
@@ -198,8 +295,9 @@ class AppFlowTest {
     }
     @Test fun threeSwipePagesLeadToSimpleLoginAfterGetStarted() {
         ui.runOnUiThread {
-            ui.activity.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE)
-                .edit().remove("profile_ready").remove("intro_done").commit()
+            (ui.activity.application as AccountTestApplication).identity = null
+            AccountData.navigation(ui.activity).edit().putBoolean("intro_done", false).remove("login_pending").commit()
+            CloudBackup.bindAccount()
         }
         ui.activityRule.scenario.recreate()
         ui.onNodeWithText("Find your focus.").assertIsDisplayed()
@@ -219,7 +317,7 @@ class AppFlowTest {
         screenshot("00-simple-login")
         ui.onNodeWithText("Sign up").performClick()
         ui.onNodeWithText("Create your account").assertIsDisplayed()
-        ui.onNodeWithText("Confirm password").assertIsDisplayed()
+        ui.onNodeWithText("Confirm password").performScrollTo().assertIsDisplayed()
         screenshot("00-simple-signup")
         ui.onNodeWithText("← Back").performClick()
         ui.onNodeWithText("Find your focus.").assertIsDisplayed()
@@ -269,7 +367,7 @@ class AppFlowTest {
         ui.runOnUiThread{
             val store=FocusStore(ui.activity)
             store.configure(5);store.start()
-            ui.activity.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE).edit()
+            AccountData.preferences(ui.activity).edit()
                 .putLong("end_elapsed",SystemClock.elapsedRealtime()-100)
                 .putLong("end_wall",System.currentTimeMillis()-100).commit()
         }
@@ -281,7 +379,7 @@ class AppFlowTest {
         ui.runOnUiThread {
             val context=ui.activity
             fun store()=FocusStore(context)
-            val prefs=context.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE)
+            val prefs=AccountData.preferences(context)
             fun due(minutes:Int,mode:String="focus"){
                 store().configure(minutes,mode=mode);store().start()
                 prefs.edit().putLong("end_elapsed",SystemClock.elapsedRealtime()-100)
@@ -334,7 +432,7 @@ class AppFlowTest {
         ui.runOnUiThread{
             val context=ui.activity
             val store=FocusStore(context)
-            val prefs=context.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE)
+            val prefs=AccountData.preferences(context)
             store.configure(60);store.start()
             prefs.edit().putLong("end_elapsed",SystemClock.elapsedRealtime()-100)
                 .putLong("end_wall",System.currentTimeMillis()-100).commit()
@@ -380,7 +478,7 @@ class AppFlowTest {
     @Test fun uninstallProtectionRequiresConsentAndReleasesOnlyAfterSessionEnd(){
         val context=ui.activity
         val store=FocusStore(context)
-        val prefs=context.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE)
+        val prefs=AccountData.preferences(context)
         fun activateForSession(mode:String="focus"){
             ui.runOnUiThread{
                 store.configure(60,mode=mode)

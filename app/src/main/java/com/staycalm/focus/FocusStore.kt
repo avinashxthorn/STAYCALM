@@ -30,7 +30,7 @@ object Evolution {
 class FocusStore(private val context: Context) {
     // All Activity, service and receiver instances share one transaction lock.
     companion object { private val timerLock = Any() }
-    private val prefs=context.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE)
+    private val prefs=AccountData.preferences(context)
     private fun parsePlan(o:JSONObject) = PlanItem(o.optString("id"),o.optString("title"),o.optString("date"),o.optString("time"),o.optInt("duration",25),o.optBoolean("done"),o.optBoolean("remind"))
     private fun encode(p:PlanItem)=JSONObject().put("id",p.id).put("title",p.title).put("date",p.date).put("time",p.time).put("duration",p.duration).put("done",p.done).put("remind",p.remind)
     fun tasks():List<PlanItem> = runCatching{val a=JSONArray(prefs.getString("plans","[]")?:"[]");(0 until a.length()).map{parsePlan(a.getJSONObject(it))}}.getOrDefault(emptyList())
@@ -220,7 +220,7 @@ object FocusDnd {
     fun enter(context:Context){
         if(!allowed(context))return
         val n=context.getSystemService(NotificationManager::class.java)
-        val p=context.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE)
+        val p=AccountData.preferences(context)
         try{
             if(Build.VERSION.SDK_INT<35) p.edit().putInt("dnd_previous",n.currentInterruptionFilter).commit()
             n.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
@@ -228,7 +228,7 @@ object FocusDnd {
         }catch (_:Exception){}
     }
     fun exit(context:Context){
-        val p=context.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE)
+        val p=AccountData.preferences(context)
         if(!p.getBoolean("dnd_activated",false))return
         try{
             if(allowed(context)){

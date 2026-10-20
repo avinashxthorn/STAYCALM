@@ -162,7 +162,7 @@ internal fun FocusMediaHub(
     onOpenMiniYouTube: () -> Unit
 ) {
     val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("study_media", Context.MODE_PRIVATE) }
+    val prefs = remember { context.getSharedPreferences("study_media_${AccountData.root(context).name}", Context.MODE_PRIVATE) }
     var youtubeText by remember { mutableStateOf(prefs.getString("youtube_link", "").orEmpty()) }
     var playingId by remember { mutableStateOf<String?>(null) }
     var videoError by remember { mutableStateOf<String?>(null) }

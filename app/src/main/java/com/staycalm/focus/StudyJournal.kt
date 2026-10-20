@@ -23,8 +23,8 @@ data class StudyAttachment(
 
 /** Durable, date-indexed local copies. Original provider permissions are not required later. */
 class StudyJournal(private val context: Context) {
-    private val prefs = context.getSharedPreferences("staycalm_v2", Context.MODE_PRIVATE)
-    private val folder = File(context.filesDir, "journal")
+    private val prefs = AccountData.preferences(context)
+    private val folder = File(AccountData.root(context), "journal")
     private val maxFileBytes = 80L * 1024 * 1024
 
     @Synchronized fun all(): List<StudyAttachment> = runCatching {

@@ -69,11 +69,22 @@ class MainActivity:ComponentActivity(){
     }}
     override fun onCreate(savedInstanceState:android.os.Bundle?){super.onCreate(savedInstanceState);store=FocusStore(this);Notice.channels(this);LauncherIconSwitcher.apply(this,Personalization(this).darkMode())
         setContent {
+            var sessionUid by remember { mutableStateOf(AccountData.sessionUid(this@MainActivity)) }
+            DisposableEffect(Unit) {
+                val auth = if (CloudBackup.ready()) CloudBackup.auth() else null
+                val listener = com.google.firebase.auth.FirebaseAuth.AuthStateListener {
+                    // A new identity stays on Login until verification/recovery completes.
+                    if (AccountData.uid(this@MainActivity) != sessionUid) sessionUid = null
+                }
+                auth?.addAuthStateListener(listener)
+                onDispose { auth?.removeAuthStateListener(listener) }
+            }
+            key(sessionUid) {
+            store = remember { FocusStore(this@MainActivity) }
             var showAccount by rememberSaveable { mutableStateOf(false) }
-            val welcomePrefs = remember { getSharedPreferences("staycalm_v2", Context.MODE_PRIVATE) }
-            var introDone by rememberSaveable { mutableStateOf(welcomePrefs.getBoolean("intro_done", false)) }
-            var welcomeChecked by remember { mutableStateOf(false) }
-            var signedIn by remember { mutableStateOf(CloudBackup.ready() && CloudBackup.auth().currentUser != null) }
+            val welcomePrefs = remember { AccountData.navigation(this@MainActivity) }
+            var introDone by remember { mutableStateOf(welcomePrefs.getBoolean("intro_done", false)) }
+            val signedIn = sessionUid != null
             val personalization=remember{Personalization(this@MainActivity)}
             val journal=remember{StudyJournal(this@MainActivity)}
             var isDark by remember{mutableStateOf(personalization.darkMode())}
@@ -206,15 +217,14 @@ class MainActivity:ComponentActivity(){
             val today=logs.filter{Instant.ofEpochMilli(it.at).atZone(ZoneId.systemDefault()).toLocalDate()==LocalDate.now()}.sumOf{it.minutes}
             CompositionLocalProvider(LocalStaycalmDark provides isDark) {
             MaterialTheme(colorScheme=if(isDark)StaycalmDarkColors else StaycalmColors,typography=pinkTypography()){
-                if (showAccount || (!profileReady && introDone && (!signedIn || !welcomeChecked))) {
-                    AccountScreen(this@MainActivity, welcome = !profileReady && introDone,
-                        onClose = { showAccount=false; signedIn=CloudBackup.ready() && CloudBackup.auth().currentUser != null
-                            if(!profileReady){ introDone=false; welcomePrefs.edit().putBoolean("intro_done",false).apply() } },
+                if (showAccount || (!signedIn && introDone)) {
+                    AccountScreen(this@MainActivity, welcome = !signedIn, onSignedOut = { sessionUid=null },
+                        onClose = { showAccount=false
+                            if(!signedIn){ introDone=false; welcomePrefs.edit().putBoolean("intro_done",false).apply() } },
                         onRestored = { showAccount=false; recreate() },
-                        onSignedIn = { restored -> signedIn=true; welcomeChecked=true; showAccount=false; revision++
-                            if(restored) recreate() })
-                } else if (!profileReady) {
-                    FirstRunOnboarding(startAtProfile = introDone && signedIn,
+                        onSignedIn = { _ -> AccountData.finishLogin(this@MainActivity); sessionUid=AccountData.sessionUid(this@MainActivity); showAccount=false })
+                } else if (!signedIn || !profileReady) {
+                    FirstRunOnboarding(startAtProfile = signedIn,
                         signedInEmail = if(signedIn) CloudBackup.auth().currentUser?.email else null,
                         onAccount = { introDone=true; welcomePrefs.edit().putBoolean("intro_done",true).apply()
                             if(!signedIn)showAccount=true }, onFinish = { name, subject, dailyGoal, quoteMinutes ->
@@ -572,7 +582,7 @@ class MainActivity:ComponentActivity(){
                                     Surface(shape=RoundedCornerShape(22.dp),color=MaterialTheme.colorScheme.surface){
                                         Column(Modifier.padding(19.dp)){Text("Your data, your choice",fontWeight=FontWeight.Bold,fontSize=17.sp);Spacer(Modifier.height(7.dp));Text("Your data saves locally. Account sync uploads plans, history, preferences and planner files to your private Firebase account. Imported audio also travels in full file exports. No analytics trackers or AI.",color=Sub,fontSize=13.sp)}
                                     }
-                                    Text("STAYCALM · BLOOM EDITION 3.9",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
+                                    Text("STAYCALM · BLOOM EDITION 4.0",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
                                 }
                             }
                             Spacer(Modifier.height(24.dp))
@@ -678,6 +688,7 @@ class MainActivity:ComponentActivity(){
                 }
             }
             }
+            } // account identity: dispose every remembered private screen on logout/switch
         }
     }
 }

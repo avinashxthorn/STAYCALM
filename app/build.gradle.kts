@@ -12,9 +12,9 @@ android {
         applicationId = "com.staycalm.focus"
         minSdk = 26
         targetSdk = 35
-        versionCode = 19
-        versionName = "3.9.0"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        versionCode = 20
+        versionName = "4.0.0"
+        testInstrumentationRunner = "com.staycalm.focus.AccountTestRunner"
     }
     buildFeatures { compose = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
