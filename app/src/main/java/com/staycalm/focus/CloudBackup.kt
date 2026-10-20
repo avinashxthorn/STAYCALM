@@ -68,10 +68,12 @@ object CloudBackup {
     fun deviceId(): String = meta.getString("device", null) ?: UUID.randomUUID().toString().also {
         check(meta.edit().putString("device", it).commit())
     }
-    fun payload(): String = org.json.JSONObject(BackupSnapshot.encode(data.all + mapOf(
-        "plans" to (data.getString("plans", "[]") ?: "[]"),
-        "logs" to (data.getString("logs", "[]") ?: "[]"))))
-        .put("plannerFiles", org.json.JSONArray(data.getString("study_attachments", "[]") ?: "[]")).toString()
+    fun payload(uid: String? = AccountData.uid(app)): String {
+        val values = AccountData.preferencesFor(app, uid).all
+        return org.json.JSONObject(BackupSnapshot.encode(values + mapOf(
+            "plans" to (values["plans"] ?: "[]"), "logs" to (values["logs"] ?: "[]"))))
+            .put("plannerFiles", org.json.JSONArray(values["study_attachments"] as? String ?: "[]")).toString()
+    }
     fun progress(message: String) { meta.edit().putString("status", message).apply() }
     fun errorMessage(error: Exception): String = if (error is kotlinx.coroutines.TimeoutCancellationException)
         "Cloud transfer paused. Check your connection and retry; completed parts are kept"
@@ -150,7 +152,7 @@ object CloudBackup {
         val accountMeta = meta
         val user = auth().currentUser ?: error("Sign in to back up.")
         require(enabled() && user.uid == expectedUid && user.isEmailVerified) { "Cloud backup is not enabled for this account." }
-        val snapshotString = payload()
+        val snapshotString = payload(expectedUid)
         BackupSnapshot.decode(snapshotString)
         val hash = hash(snapshotString)
         if (!force && hash == accountMeta.getString("hash", null)) return

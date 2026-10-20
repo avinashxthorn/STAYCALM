@@ -22,9 +22,10 @@ object LocalBackup {
         return hash.digest()
     }
     fun export(context: Context, uri: Uri) {
+        val uid = AccountData.uid(context)
         val accountRoot = AccountData.root(context)
         val prefs = AccountData.preferences(context)
-        val snapshot = CloudBackup.payload()
+        val snapshot = CloudBackup.payload(uid)
         BackupSnapshot.decode(snapshot, MAX_SNAPSHOT_BYTES)
         val metadata = JSONObject().put("snapshot", snapshot)
             .put("study_attachments", JSONArray(prefs.getString("study_attachments", "[]")))

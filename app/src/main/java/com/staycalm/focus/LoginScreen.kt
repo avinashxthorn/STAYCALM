@@ -61,9 +61,9 @@ fun LoginScreen(context: Context, onBack: () -> Unit, onSignedIn: (Boolean) -> U
         val user = if (CloudBackup.ready()) CloudBackup.auth().currentUser else null
         if (user != null && user.isEmailVerified) recoveryFailed = true
         error = when (problem) {
+            is com.google.firebase.auth.FirebaseAuthWeakPasswordException -> "Choose a stronger password that meets this account's password requirements."
             is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException,
             is com.google.firebase.auth.FirebaseAuthInvalidUserException -> "Email or password is incorrect. Check them and try again."
-            is com.google.firebase.auth.FirebaseAuthWeakPasswordException -> "Choose a stronger password that meets this account's password requirements."
             is com.google.firebase.auth.FirebaseAuthUserCollisionException -> "Could not create this account. Try logging in or resetting your password."
             is com.google.firebase.FirebaseNetworkException -> "Cannot connect. Check your internet and try again."
             is com.google.firebase.FirebaseTooManyRequestsException -> "Too many attempts. Please wait a little before trying again."

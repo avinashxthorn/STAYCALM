@@ -82,7 +82,7 @@ class AppFlowTest {
         assertTrue(StudyJournal(context).all().isEmpty())
         ui.activityRule.scenario.recreate()
         ui.onNodeWithText("Welcome back").assertIsDisplayed()
-        ui.onNodeWithText("← Back").performClick()
+        ui.onNodeWithText("← Back").performScrollTo().performClick()
         ui.onNodeWithText("Find your focus.").assertIsDisplayed()
         ui.onNodeWithText("Insights").assertDoesNotExist()
         // Local copies remain recoverable only after returning to their account.
@@ -319,7 +319,7 @@ class AppFlowTest {
         ui.onNodeWithText("Create your account").assertIsDisplayed()
         ui.onNodeWithText("Confirm password").performScrollTo().assertIsDisplayed()
         screenshot("00-simple-signup")
-        ui.onNodeWithText("← Back").performClick()
+        ui.onNodeWithText("← Back").performScrollTo().performClick()
         ui.onNodeWithText("Find your focus.").assertIsDisplayed()
     }
     @Test fun separateProfileFormStillSavesPreferences() {
