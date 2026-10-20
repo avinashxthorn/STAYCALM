@@ -6,6 +6,8 @@ Completed session history is already stored in cloud snapshots. Restoring it reb
 
 Sign-up now requires email verification before private app access. Login has password visibility, keyboard submit, friendly errors and a non-enumerating reset message. A fresh login checks cloud recovery before opening the planner. An interrupted recovery stays locked with Retry; Continue without restoring does not turn on uploads. Logout offers Sync and log out when enabled sync has pending changes, stops private notifications/playback and revokes file-viewer grants. Finish/end an unfinished timer before logout.
 
+Login includes a clear cloud-backup checkbox; the selected preference takes effect only after verification/recovery succeeds.
+
 No rules changes beyond the 3.9 firestore.rules are required. Previously unsynced changes still need a successful upload; shared Firebase Spark quotas still apply. Export a full ZIP before installing a differently signed APK.
 
 ---

@@ -39,6 +39,7 @@ fun LoginScreen(context: Context, onBack: () -> Unit, onSignedIn: (Boolean) -> U
     var confirm by remember { mutableStateOf("") }
     var visible by remember { mutableStateOf(false) }
     var signingUp by rememberSaveable { mutableStateOf(false) }
+    var cloudConsent by rememberSaveable { mutableStateOf(AccountData.navigation(context).getBoolean("pending_sync", true)) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
@@ -51,7 +52,7 @@ fun LoginScreen(context: Context, onBack: () -> Unit, onSignedIn: (Boolean) -> U
         verification = false
         // Verification claims must be refreshed before accessing verified-owner rules.
         withTimeout(30_000) { CloudBackup.auth().currentUser!!.getIdToken(true).await() }
-        val restored = CloudBackup.recoverAfterLogin()
+        val restored = CloudBackup.recoverAfterLogin(enableSync = cloudConsent)
         AccountData.finishLogin(context)
         Toast.makeText(context, "Login successful", Toast.LENGTH_LONG).show()
         onSignedIn(restored)
@@ -96,6 +97,7 @@ fun LoginScreen(context: Context, onBack: () -> Unit, onSignedIn: (Boolean) -> U
                 }
                 require(CloudBackup.ready()) { "Cloud login is not configured yet." }
                 AccountData.beginLogin(context)
+                check(AccountData.navigation(context).edit().putBoolean("pending_sync", cloudConsent).commit())
                 withTimeout(30_000) {
                     if (signingUp) CloudBackup.auth().createUserWithEmailAndPassword(email.trim(), password).await()
                     else CloudBackup.auth().signInWithEmailAndPassword(email.trim(), password).await()
@@ -170,6 +172,10 @@ fun LoginScreen(context: Context, onBack: () -> Unit, onSignedIn: (Boolean) -> U
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { submit() }),
                         enabled = !busy, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
                 }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = cloudConsent, onCheckedChange = { cloudConsent = it }, enabled = !busy)
+                    Text("Save my progress and planner files in the cloud", style = MaterialTheme.typography.bodySmall)
+                }
                 Button(onClick = { submit() }, enabled = !busy && email.isNotBlank() && password.isNotEmpty(),
                     shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().height(54.dp)) { Text(if (signingUp) "Create account" else "Log in") }
                 if (!signingUp) TextButton(onClick = {
@@ -194,7 +200,7 @@ fun LoginScreen(context: Context, onBack: () -> Unit, onSignedIn: (Boolean) -> U
                 OutlinedButton(onClick = { AccountData.finishLogin(context); onSignedIn(false) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Continue without restoring") }
             }
             if (verification || recoveryFailed) TextButton(onClick = {
-                CloudBackup.signOut(); verification = false; recoveryFailed = false; error = null; notice = null; password = ""; confirm = ""
+                CloudBackup.signOut(); cloudConsent = true; verification = false; recoveryFailed = false; error = null; notice = null; password = ""; confirm = ""
             }, enabled = !busy) { Text("Use another account") }
             if (busy) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("Please wait…", style = MaterialTheme.typography.bodySmall) }
             notice?.let { Text(it, color = MaterialTheme.colorScheme.primary) }

@@ -85,36 +85,34 @@ object CloudBackup {
         val uid = auth().currentUser?.uid ?: error("Sign in first.")
         CloudPlannerFiles(app).restore(uid, copy.payload) { if (AccountData.uid(app) == uid) progress(it) }
     }
-    suspend fun recoverAfterLogin(): Boolean {
+    suspend fun recoverAfterLogin(enableSync: Boolean = false): Boolean {
         bindAccount()
         // A first login on a fresh installation can safely recover without replacing local work.
         require(auth().currentUser?.isEmailVerified == true) { "Verify your email before opening your account." }
         if (Personalization(app).isReady() ||
             FocusStore(app).tasks().isNotEmpty() || FocusStore(app).logs().isNotEmpty() || StudyJournal(app).all().isNotEmpty()) {
-            if (meta.getBoolean("resume_sync", false)) enable()
+            if (enableSync) enable() else disable()
             return false
         }
-        val latest = copies().firstOrNull() ?: return false
-        restoreCloud(latest)
-        enable()
-        return true
+        val latest = copies().firstOrNull()
+        if (latest != null) restoreCloud(latest)
+        if (enableSync) enable() else disable()
+        return latest != null
     }
     fun enable() {
         val user = auth().currentUser ?: error("Sign in first.")
         require(user.isEmailVerified) { "Verify your email first, then tap Check verification." }
-        check(meta.edit().putString("owner", user.uid).putBoolean("resume_sync", true).remove("hash").putString("status", "Backup enabled. Waiting for the first confirmed cloud upload.").commit())
+        check(meta.edit().putString("owner", user.uid).remove("hash").putString("status", "Backup enabled. Waiting for the first confirmed cloud upload.").commit())
         schedule()
     }
     fun disable() {
-        check(meta.edit().remove("owner").putBoolean("resume_sync", false).putString("status", "Cloud backup is off. Local data and existing cloud copies are kept.").commit())
+        check(meta.edit().remove("owner").putString("status", "Cloud backup is off. Local data and existing cloud copies are kept.").commit())
         WorkManager.getInstance(app).cancelUniqueWork(WORK)
         WorkManager.getInstance(app).cancelUniqueWork("$WORK-periodic")
     }
     fun signOut() {
         require(!SessionUninstallGuard.unfinished(FocusStore(app).state())) { "Finish or end your current session before logging out." }
-        val resumeSync = enabled()
         disable()
-        check(meta.edit().putBoolean("resume_sync", resumeSync).commit())
         FocusStore(app).tasks().forEach { FocusAlarms.cancelTask(app, it.id) }
         FocusAlarms.cancelFocus(app)
         MotivationAlarms.cancel(app)
