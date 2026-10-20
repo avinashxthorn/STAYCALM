@@ -2,6 +2,8 @@ name: STAYCALM · Android APK
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 concurrency:
   group: staycalm-android-${{ github.ref }}
@@ -24,6 +26,20 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
+      - name: Load optional Firebase Android configuration
+        env:
+          FIREBASE_ANDROID_CONFIG: ${{ secrets.FIREBASE_ANDROID_CONFIG }}
+        shell: bash
+        run: |
+          if [ -n "$FIREBASE_ANDROID_CONFIG" ]; then
+            python3 - <<'PYCONFIG'
+          import json, os
+          from pathlib import Path
+          config = json.loads(os.environ['FIREBASE_ANDROID_CONFIG'])
+          assert any(c['client_info']['android_client_info']['package_name'] == 'com.staycalm.focus' for c in config['client'])
+          Path('app/google-services.json').write_text(json.dumps(config))
+          PYCONFIG
+          fi
       - name: Prepare offline font and verify four audio tracks
         run: bash scripts/fetch-assets.sh
       - name: Verify local unit tests
@@ -51,6 +67,7 @@ jobs:
           archive: false
           retention-days: 30
       - name: Publish direct installable APK through GitHub Releases
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         continue-on-error: true
         # Release assets are raw APKs and a public latest-download URL.
         # The unzipped v7 Actions artifact above is a second direct APK source.
@@ -67,7 +84,7 @@ jobs:
             gh release create "$TAG" \
               dist/STAYCALM.apk dist/STAYCALM.apk.sha256 \
               --target "${GITHUB_SHA}" \
-              --title "STAYCALM 3.7.7 - Searchable mini YouTube APK (build ${GITHUB_RUN_NUMBER})" \
+              --title "STAYCALM 3.8.0 - Accounts and backup APK (build ${GITHUB_RUN_NUMBER})" \
               --notes "Download STAYCALM.apk directly (do not download Source code ZIP or an Actions artifact). This debug-signed APK passed unit tests, lint, archive integrity, package and Android signature checks. GitHub runners may produce different debug certificates; installing over an old STAYCALM may fail with a signature mismatch. Do not uninstall without preserving important local data." \
               --latest
           fi

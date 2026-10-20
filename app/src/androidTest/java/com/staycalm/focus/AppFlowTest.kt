@@ -47,6 +47,48 @@ class AppFlowTest {
         val exported=shell("ls /data/local/tmp/staycalm-screenshots/$name.png")
         assertTrue("Screenshot must survive test cleanup: $exported",exported.contains("$name.png"))
     }
+    @Test fun accountAndRecoveryScreenIsReachable(){
+        ui.onNodeWithText("Settings").performClick()
+        ui.onNodeWithText("Account & backup").performScrollTo().performClick()
+        ui.onNodeWithText("Full file backup").performScrollTo().assertIsDisplayed()
+        ui.onNodeWithText("Export full backup").performScrollTo().assertIsDisplayed()
+        screenshot("11-account-backup")
+    }
+    @Test fun fullBackupRestoresPlansJournalAndImportedAudio(){
+        val context=ui.activity
+        val store=FocusStore(context)
+        val plan=store.addTask("Recovery test",LocalDate.now().toString(),"12:00",25,false)
+        val source=android.net.Uri.parse("android.resource://${context.packageName}/${Ambients.all.first().raw}")
+        val attachment=StudyJournal(context).import(LocalDate.now(),source)
+        val audio=AudioLibrary(context).import(source)
+        val zip=File(context.cacheDir,"recovery-test.zip")
+        try {
+            LocalBackup.export(context,android.net.Uri.fromFile(zip))
+            store.deleteTask(plan); StudyJournal(context).remove(attachment); AudioLibrary(context).remove(audio)
+            assertFalse(File(context.filesDir,"journal/${attachment.id}").exists())
+            LocalBackup.restore(context,android.net.Uri.fromFile(zip))
+            assertTrue(FocusStore(context).tasks().any{it.id==plan.id})
+            assertTrue(StudyJournal(context).all().any{it.id==attachment.id})
+            assertTrue(AudioLibrary(context).imported().any{it.id==audio.id})
+        } finally { zip.delete() }
+    }
+    @Test fun corruptBackupAndActiveTimerDoNotReplaceLocalPlans(){
+        val context=ui.activity
+        val store=FocusStore(context)
+        val plan=store.addTask("Keep this plan",LocalDate.now().toString(),"12:00",25,false)
+        val zip=File(context.cacheDir,"invalid-backup.zip")
+        try {
+            java.util.zip.ZipOutputStream(zip.outputStream()).use { out ->
+                out.putNextEntry(java.util.zip.ZipEntry("../escape")); out.write(byteArrayOf(1)); out.closeEntry()
+            }
+            assertThrows(Exception::class.java){LocalBackup.restore(context,android.net.Uri.fromFile(zip))}
+            assertTrue(FocusStore(context).tasks().any{it.id==plan.id})
+            val payload=CloudBackup.payload()
+            store.start()
+            assertThrows(Exception::class.java){CloudBackup.restore(payload)}
+            assertTrue(FocusStore(context).tasks().any{it.id==plan.id})
+        } finally { zip.delete(); store.abandon() }
+    }
     @Test fun pinkScreensAndPlannerFlow(){
         ui.onNodeWithText("Let your focus bloom.").assertIsDisplayed()
         screenshot("01-focus")

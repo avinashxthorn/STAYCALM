@@ -90,3 +90,17 @@ No finite set of checks can guarantee an app has no defects on every Android dev
 - Test poor connectivity, WebView blocked content, sign-in limitations, and video embed restrictions on the target Android phone. Android installation of the debug APK can fail over older builds with different signing keys.
 
 - Verify mini YouTube also opens from the one-tap video icon in the Focus header. Closing it returns to the same focus timer without resetting the session.
+
+
+## Account and recovery (3.8.0)
+- Without Firebase config, Account & backup explains setup; local app and file export still work.
+- Real configured project: sign up, verify email, check verification, log out, log in, reset password.
+- Opt in, wait for confirmed upload, change a plan, background app and confirm automatic upload.
+- Offline changes stay local; reconnect and verify retry and last successful backup time.
+- Sign in on a new device; do not enable upload before restoring original-device copy.
+- Restore plans/history/rewards/profile with no active timer; confirm reminders reschedule.
+- Active or paused timer blocks cloud and file restores.
+- Logging out and switching accounts never automatically uploads old local data.
+- PDFs and imported audio are explicitly excluded from cloud; full ZIP round trip preserves them.
+- Invalid/truncated/path-traversing ZIP and future/oversized JSON fail before replacing preferences.
+- Never uninstall an existing build just to bypass a debug signing mismatch.

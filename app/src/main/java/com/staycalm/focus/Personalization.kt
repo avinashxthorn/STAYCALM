@@ -15,7 +15,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.core.content.ContextCompat
 import java.time.LocalTime
 
-/** User-owned preferences; nothing is uploaded to a server. */
+/** User-owned preferences; cloud backup is opt-in from Account & backup. */
 val LocalStaycalmDark = compositionLocalOf { false }
 
 class Personalization(private val context: Context) {

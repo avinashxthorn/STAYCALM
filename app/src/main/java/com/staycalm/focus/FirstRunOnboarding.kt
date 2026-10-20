@@ -53,6 +53,7 @@ private val introCaptions = listOf("01 / A CALMER START", "02 / YOUR STUDY STORY
  */
 @Composable
 fun FirstRunOnboarding(
+    onAccount: () -> Unit = {},
     onFinish: (name: String, subject: String, goalMinutes: Int, quoteMinutes: Int) -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -90,6 +91,7 @@ fun FirstRunOnboarding(
                     letterSpacing = 1.5.sp, color = scheme.primary)
             }
         }
+        TextButton(onClick = onAccount) { Text("Log in / Restore") }
         if (!profileStep) {
             HorizontalPager(
                 state = pager,
