@@ -24,6 +24,11 @@ class BackupSnapshotTest {
         assertThrows(Exception::class.java) { BackupSnapshot.decode(BackupSnapshot.encode(values + ("profile_name" to "x".repeat(750001)))) }
         assertThrows(Exception::class.java) { BackupSnapshot.decode(BackupSnapshot.encode(values).replace("\"schema\":1", "\"schema\":2")) }
     }
+    @Test fun fileExportAllowsHistoryLargerThanCloudDocumentLimit() {
+        val payload = BackupSnapshot.encode(values + ("profile_subject" to "x".repeat(800000)))
+        assertThrows(Exception::class.java) { BackupSnapshot.decode(payload) }
+        assertEquals(800000, (BackupSnapshot.decode(payload, 10_000_000)["profile_subject"] as String).length)
+    }
     @Test fun refusesWrongTypesAndUnsafeSettings() {
         assertThrows(Exception::class.java) { BackupSnapshot.decode(BackupSnapshot.encode(values + ("daily_goal" to "120"))) }
         assertThrows(Exception::class.java) { BackupSnapshot.decode(BackupSnapshot.encode(values + ("reward_balance" to -5L))) }

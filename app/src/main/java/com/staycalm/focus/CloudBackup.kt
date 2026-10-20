@@ -101,8 +101,9 @@ object CloudBackup {
             .documents.map { CloudCopy(it.id, it.getString("label") ?: "Device", it.getTimestamp("updatedAt")?.toDate()?.time ?: 0,
                 it.getString("payload") ?: error("Incomplete cloud backup.")) }
     }
-    fun restore(payload: String) {
-        val values = BackupSnapshot.decode(payload)
+    fun restore(payload: String, maxBytes: Int = BackupSnapshot.MAX_BYTES, fileLists: Map<String, String> = emptyMap()) {
+        require(fileLists.keys.all { it in setOf("study_attachments", "imported_audio") })
+        val values = BackupSnapshot.decode(payload, maxBytes)
         require(!SessionUninstallGuard.unfinished(FocusStore(app).state())) { "Finish your timer before restoring a backup." }
         // Stop future uploads before replacing local state; no live timers/permission grants restored.
         disable()
@@ -110,6 +111,7 @@ object CloudBackup {
         val editor = data.edit()
         BackupSnapshot.keys.forEach { editor.remove(it) }
         putValues(editor, values)
+        fileLists.forEach { (key, value) -> editor.putString(key, value) }
         check(editor.commit()) { "Could not restore this backup. Your cloud copy is unchanged." }
         previousPlans.forEach { FocusAlarms.cancelTask(app, it.id) }
         FocusStore(app).tasks().filter { it.remind && !it.done }.forEach { FocusAlarms.scheduleTask(app, it) }

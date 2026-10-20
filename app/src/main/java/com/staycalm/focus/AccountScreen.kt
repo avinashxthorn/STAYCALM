@@ -113,6 +113,7 @@ fun AccountScreen(context: Context, onClose: () -> Unit, onRestored: () -> Unit)
                         message = if (CloudBackup.auth().currentUser?.isEmailVerified == true) "Email verified. You can now enable backup or restore." else "Email is not verified yet. Check your inbox and spam folder."
                     } }, enabled = !busy) { Text("Check verification") }
                 } else {
+                    if (CloudBackup.enabled() && CloudBackup.needsUpload()) Text("Changes are waiting for a confirmed cloud backup.")
                     Text(CloudBackup.status())
                     Text("Cloud copies include plans, focus history, reward balance, your profile and study preferences. PDF/journal files and imported audio stay local; use Export full backup below.")
                     OutlinedTextField(phone, { phone = it.take(30) }, label = { Text("Phone number (optional)") }, singleLine = true,

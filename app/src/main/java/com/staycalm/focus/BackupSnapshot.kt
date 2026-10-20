@@ -16,8 +16,8 @@ object BackupSnapshot {
     fun encode(values: Map<String, *>): String = JSONObject().put("schema", 1).put("values",
         JSONObject().apply { keys.sorted().forEach { key -> values[key]?.let { put(key, it) } } }).toString()
 
-    fun decode(payload: String): Map<String, Any> {
-        require(payload.toByteArray(Charsets.UTF_8).size <= MAX_BYTES) { "Backup is too large (maximum 750 KB). Export a file instead." }
+    fun decode(payload: String, maxBytes: Int = MAX_BYTES): Map<String, Any> {
+        require(payload.toByteArray(Charsets.UTF_8).size <= maxBytes) { if (maxBytes == MAX_BYTES) "Cloud backup is too large (maximum 750 KB). Export a file instead." else "This file contains too much structured data to restore safely." }
         val root = JSONObject(payload)
         require(root.getInt("schema") == 1) { "This backup needs a newer app version." }
         val data = root.getJSONObject("values")

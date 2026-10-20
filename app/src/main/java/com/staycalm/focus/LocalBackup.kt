@@ -12,6 +12,7 @@ import java.util.zip.ZipOutputStream
 
 /** A user-chosen file backup also preserves PDFs/audio without paid Cloud Storage. */
 object LocalBackup {
+    private const val MAX_SNAPSHOT_BYTES = 10_000_000
     private const val MAX_ARCHIVE_BYTES = 1024L * 1024 * 1024
     private fun safeFile(path: String): Boolean = Regex("(journal|audio)/[A-Za-z0-9_.-]{1,120}").matches(path) && !path.contains("..")
     private fun digest(input: java.io.InputStream): ByteArray {
@@ -23,7 +24,7 @@ object LocalBackup {
     fun export(context: Context, uri: Uri) {
         val prefs = context.getSharedPreferences("staycalm_v2", Context.MODE_PRIVATE)
         val snapshot = CloudBackup.payload()
-        BackupSnapshot.decode(snapshot)
+        BackupSnapshot.decode(snapshot, MAX_SNAPSHOT_BYTES)
         val metadata = JSONObject().put("snapshot", snapshot)
             .put("study_attachments", JSONArray(prefs.getString("study_attachments", "[]")))
             .put("imported_audio", JSONArray(prefs.getString("imported_audio", "[]")))
@@ -64,7 +65,7 @@ object LocalBackup {
                             if (count < 0) break
                             total += count; entrySize += count
                             require(total <= MAX_ARCHIVE_BYTES) { "Backup exceeds the 1 GB restore limit." }
-                            require(entry.name != "staycalm.json" || entrySize <= 4_000_000) { "Backup metadata is too large." }
+                            require(entry.name != "staycalm.json" || entrySize <= 32_000_000) { "Backup metadata is too large." }
                             out.write(buffer, 0, count)
                         }
                     }
@@ -72,7 +73,7 @@ object LocalBackup {
             }
             val meta = JSONObject(File(staging, "staycalm.json").readText())
             val payload = meta.getString("snapshot")
-            BackupSnapshot.decode(payload)
+            BackupSnapshot.decode(payload, MAX_SNAPSHOT_BYTES)
             val attachments = meta.getJSONArray("study_attachments")
             repeat(attachments.length()) { i ->
                 val item = attachments.getJSONObject(i)
@@ -102,9 +103,7 @@ object LocalBackup {
                 val target = File(context.filesDir, path)
                 if (!target.exists()) { target.parentFile!!.mkdirs(); File(staging, path).copyTo(target) }
             }
-            CloudBackup.restore(payload)
-            check(context.getSharedPreferences("staycalm_v2", Context.MODE_PRIVATE).edit()
-                .putString("study_attachments", attachments.toString()).putString("imported_audio", audio.toString()).commit())
+            CloudBackup.restore(payload, MAX_SNAPSHOT_BYTES, mapOf("study_attachments" to attachments.toString(), "imported_audio" to audio.toString()))
         } finally { staging.deleteRecursively() }
     }
 }
