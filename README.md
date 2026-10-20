@@ -18,9 +18,9 @@ A native Android focus companion in a cohesive pink theme. Kotlin, Jetpack Compo
 - Six-stage pink turtle companion, earned through completed focus time.
 - Four supplied offline tracks, personal audio imports, seeking, volume, previous/next, and lock-screen playback controls. Every track loops automatically and stops when the session completes or is ended.
 - Optional Do Not Disturb and precise session alerts, subject to Android permissions.
-- Local-only storage, no accounts or analytics. Optional embedded YouTube and HTTPS podcast playback require internet; video playback connects to YouTube, RSS podcast feeds connect to their publishers.
+- Local-first storage with optional email accounts and opt-in cloud recovery; no analytics trackers. Optional embedded YouTube and HTTPS podcast playback require internet; video playback connects to YouTube, RSS podcast feeds connect to their publishers.
 
-## Build and download (v3.7.6)
+## Build and download (v3.8.0)
 
 **Mobile-friendly download:** After the latest GitHub Actions build succeeds, open [STAYCALM Releases](https://github.com/avinashxthorn/STAYCALM/releases/latest), expand **Assets**, and download **STAYCALM.apk**. This is a real, installable APK, **not** a ZIP file. Do not choose **Source code (zip)** or **Source code (tar.gz)**.
 
