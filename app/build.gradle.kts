@@ -12,9 +12,21 @@ android {
         applicationId = "com.staycalm.focus"
         minSdk = 26
         targetSdk = 35
-        versionCode = 21
-        versionName = "4.0.1"
+        versionCode = System.getenv("STAYCALM_VERSION_CODE")?.toInt() ?: 22
+        versionName = "4.1.0"
         testInstrumentationRunner = "com.staycalm.focus.AccountTestRunner"
+    }
+    val permanentKey = System.getenv("STAYCALM_KEYSTORE_PATH")
+    val permanentPassword = System.getenv("STAYCALM_KEYSTORE_PASSWORD")
+    if (!permanentKey.isNullOrBlank() && !permanentPassword.isNullOrBlank()) {
+        signingConfigs.create("permanent") {
+            storeFile = file(permanentKey)
+            storeType = "PKCS12"
+            storePassword = permanentPassword
+            keyAlias = "staycalm"
+            keyPassword = permanentPassword
+        }
+        buildTypes.getByName("release").signingConfig = signingConfigs.getByName("permanent")
     }
     buildFeatures { compose = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }

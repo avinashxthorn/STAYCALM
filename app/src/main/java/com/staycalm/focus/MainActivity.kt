@@ -582,7 +582,7 @@ class MainActivity:ComponentActivity(){
                                     Surface(shape=RoundedCornerShape(22.dp),color=MaterialTheme.colorScheme.surface){
                                         Column(Modifier.padding(19.dp)){Text("Your data, your choice",fontWeight=FontWeight.Bold,fontSize=17.sp);Spacer(Modifier.height(7.dp));Text("Your data saves locally. Account sync uploads plans, history, profile, preferences and rewards to your private Firebase account. Planner files and imported audio need a full ZIP export. No analytics trackers or AI.",color=Sub,fontSize=13.sp)}
                                     }
-                                    Text("STAYCALM · BLOOM EDITION 4.0.1",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
+                                    Text("STAYCALM · BLOOM EDITION 4.1",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
                                 }
                             }
                             Spacer(Modifier.height(24.dp))

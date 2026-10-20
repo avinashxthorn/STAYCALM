@@ -28,7 +28,11 @@ fun FocusMusicPlayer(selected:Ambient,onBrowse:()->Unit,onImport:()->Unit,import
     var volume by remember{mutableFloatStateOf(FocusStore(context).soundVolume())}
     fun send(action:String,position:Long=0){
         val intent=Intent(context,SoundService::class.java).setAction(action).putExtra("sound",track.id).putExtra("position",position)
-        try{if(action=="play"||action=="next"||action=="previous")context.startForegroundService(intent) else context.startService(intent)}
+        try{
+            if(podcastActive && action=="play" && state.error!=null && state.sourceUrl!=null)
+                SoundService.playPodcast(context,PodcastEpisode(state.title,state.sourceUrl))
+            else if(action=="play"||action=="next"||action=="previous")context.startForegroundService(intent) else context.startService(intent)
+        }
         catch(_:Exception){AudioPlayback.state=state.copy(error="Playback could not start. Please try again.")}
     }
     Surface(shape=RoundedCornerShape(24.dp),color=MaterialTheme.colorScheme.surface,border=BorderStroke(1.dp,lightRose)){
@@ -36,21 +40,21 @@ fun FocusMusicPlayer(selected:Ambient,onBrowse:()->Unit,onImport:()->Unit,import
             Row(verticalAlignment=Alignment.CenterVertically){
                 Surface(color=lightRose,shape=RoundedCornerShape(14.dp)){Icon(Icons.Rounded.Headphones,null,tint=roseInk,modifier=Modifier.padding(13.dp).size(24.dp))}
                 Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)){Text("FOCUS PLAYER",fontSize=9.sp,fontWeight=FontWeight.Bold,letterSpacing=1.2.sp,color=roseInk);Text(if(podcastActive)"Podcast is playing · controls below" else track.label,fontWeight=FontWeight.Bold,color=plumInk,maxLines=2,overflow=TextOverflow.Ellipsis)}
+                Column(Modifier.weight(1f)){Text("FOCUS PLAYER",fontSize=9.sp,fontWeight=FontWeight.Bold,letterSpacing=1.2.sp,color=roseInk);Text(if(podcastActive)state.title.ifBlank{"Podcast episode"} else track.label,fontWeight=FontWeight.Bold,color=plumInk,maxLines=2,overflow=TextOverflow.Ellipsis)}
                 IconButton(onClick=onBrowse){Icon(Icons.Rounded.QueueMusic,"Choose audio",tint=roseInk)}
             }
-            Text("Loops until your session ends",fontSize=12.sp,color=mutedInk)
+            Text(if(podcastActive)"Podcast · background audio" else "Loops until your session ends",fontSize=12.sp,color=mutedInk)
             Slider(value=if(dragging)seekPosition else state.position.toFloat().coerceIn(0f,state.duration.coerceAtLeast(1).toFloat()),onValueChange={dragging=true;seekPosition=it},onValueChangeFinished={send("seek",seekPosition.toLong());dragging=false},valueRange=0f..state.duration.coerceAtLeast(1).toFloat(),enabled=state.duration>0 && !state.loading)
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(FocusClock.displayTime(if(dragging)seekPosition.toLong() else state.position),fontSize=11.sp,color=mutedInk);Text(FocusClock.displayTime(state.duration),fontSize=11.sp,color=mutedInk)}
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){
-                IconButton(onClick={send("previous")},enabled=!podcastActive){Icon(Icons.Rounded.SkipPrevious,"Previous audio",tint=roseInk)}
+                IconButton(onClick={send(if(podcastActive)"rewind" else "previous")},enabled=!state.loading){Icon(if(podcastActive)Icons.Rounded.Replay30 else Icons.Rounded.SkipPrevious,if(podcastActive)"Back 30 seconds" else "Previous audio",tint=roseInk)}
                 Spacer(Modifier.width(14.dp))
                 FilledIconButton(onClick={send(if(state.playing)"pause" else "play")},enabled=!state.loading,modifier=Modifier.size(60.dp),colors=IconButtonDefaults.filledIconButtonColors(containerColor=roseInk)){
                     if(state.loading)CircularProgressIndicator(Modifier.size(24.dp),color=Color.White,strokeWidth=2.dp)
                     else Icon(if(state.playing)Icons.Rounded.Pause else Icons.Rounded.PlayArrow,if(state.playing)"Pause audio" else "Play audio",modifier=Modifier.size(30.dp))
                 }
                 Spacer(Modifier.width(14.dp))
-                IconButton(onClick={send("next")},enabled=!podcastActive){Icon(Icons.Rounded.SkipNext,"Next audio",tint=roseInk)}
+                IconButton(onClick={send(if(podcastActive)"forward" else "next")},enabled=!state.loading){Icon(if(podcastActive)Icons.Rounded.Forward30 else Icons.Rounded.SkipNext,if(podcastActive)"Forward 30 seconds" else "Next audio",tint=roseInk)}
             }
             Row(verticalAlignment=Alignment.CenterVertically){Icon(Icons.Rounded.VolumeDown,null,tint=mutedInk);Slider(value=volume,onValueChange={volume=it;FocusStore(context).setVolume(it);if(state.id.isNotBlank())send("volume")},modifier=Modifier.weight(1f));Icon(Icons.Rounded.VolumeUp,null,tint=mutedInk)}
             if(state.error!=null)Text(state.error,color=roseInk,fontSize=12.sp)

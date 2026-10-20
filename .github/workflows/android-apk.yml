@@ -40,60 +40,52 @@ jobs:
           Path('app/google-services.json').write_text(json.dumps(config))
           PYCONFIG
           fi
+      - name: Prepare permanent signing and increasing version code
+        env:
+          STAYCALM_KEYSTORE_BASE64: ${{ github.event_name != 'pull_request' && secrets.STAYCALM_KEYSTORE_BASE64 || '' }}
+          STAYCALM_KEYSTORE_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.STAYCALM_KEYSTORE_PASSWORD || '' }}
+        run: python3 scripts/prepare-signing.py
       - name: Prepare offline font and verify four audio tracks
         run: bash scripts/fetch-assets.sh
       - name: Verify local unit tests
         run: gradle --no-daemon :app:testDebugUnitTest :app:lintDebug --stacktrace --console=plain
-      - name: Assemble debug APK
-        run: gradle --no-daemon :app:assembleDebug
+      - name: Assemble signed release or test-only debug APK
+        env:
+          STAYCALM_KEYSTORE_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.STAYCALM_KEYSTORE_PASSWORD || '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$STAYCALM_SIGNING_READY" = true ]; then
+            gradle --no-daemon :app:assembleRelease
+            echo 'APK_PATH=app/build/outputs/apk/release/app-release.apk' >> "$GITHUB_ENV"
+          else
+            gradle --no-daemon :app:assembleDebug
+            echo 'APK_PATH=app/build/outputs/apk/debug/app-debug.apk' >> "$GITHUB_ENV"
+          fi
       - name: Verify APK integrity, package and Android signature
         shell: bash
         run: |
           set -euo pipefail
-          APK="app/build/outputs/apk/debug/app-debug.apk"
-          test -s "$APK"
-          unzip -t "$APK" >/dev/null
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.staycalm.focus'"
+          test -s "$APK_PATH"
+          unzip -t "$APK_PATH" >/dev/null
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK_PATH" > "$RUNNER_TEMP/apk-certificate.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK_PATH" | grep -F "package: name='com.staycalm.focus'"
           mkdir -p dist
-          cp "$APK" dist/STAYCALM.apk
-          (cd dist && sha256sum STAYCALM.apk > STAYCALM.apk.sha256)
-          echo "Validated APK bytes: $(wc -c < dist/STAYCALM.apk)"
-          cat dist/STAYCALM.apk.sha256
-      - name: Upload direct APK (no ZIP extraction)
-        uses: actions/upload-artifact@v7
-        with:
-          path: dist/STAYCALM.apk
-          archive: false
-          retention-days: 30
-      - name: Publish direct installable APK through GitHub Releases
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        continue-on-error: true
-        # Release assets are raw APKs and a public latest-download URL.
-        # The unzipped v7 Actions artifact above is a second direct APK source.
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          TAG="android-build-${GITHUB_RUN_NUMBER}"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/STAYCALM.apk dist/STAYCALM.apk.sha256 --clobber
+          if [ "$STAYCALM_SIGNING_READY" = true ]; then
+            ACTUAL="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/apk-certificate.txt" | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+            test "$ACTUAL" = "$(tr -d '\r\n' < signing/certificate-sha256.txt)"
+            cp "$APK_PATH" dist/STAYCALM.apk
+            cp signing/certificate-sha256.txt dist/STAYCALM-signing-certificate.sha256
+            (cd dist && sha256sum STAYCALM.apk > STAYCALM.apk.sha256)
           else
-            gh release create "$TAG" \
-              dist/STAYCALM.apk dist/STAYCALM.apk.sha256 \
-              --target "${GITHUB_SHA}" \
-              --title "STAYCALM 4.0.1 - Progress cloud backup and local planner files APK (build ${GITHUB_RUN_NUMBER})" \
-              --notes "Download STAYCALM.apk directly (do not download Source code ZIP or an Actions artifact). This debug-signed APK passed unit tests, lint, archive integrity, package and Android signature checks. GitHub runners may produce different debug certificates; installing over an old STAYCALM may fail with a signature mismatch. Do not uninstall without preserving important local data." \
-              --latest
+            cp "$APK_PATH" dist/STAYCALM-test-only.apk
           fi
       - name: Enable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Verify Android UI and session flows
+      - name: Verify Android UI, podcast and session flows plus update retention
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -103,6 +95,37 @@ jobs:
           disable-animations: true
           script: |
             bash scripts/verify-android.sh
+            bash scripts/verify-update.sh
+      - name: Upload tested APK
+        uses: actions/upload-artifact@v7
+        with:
+          path: dist/*.apk
+          archive: false
+          retention-days: 14
+      - name: Publish permanently signed APK through GitHub Releases
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && env.STAYCALM_SIGNING_READY == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="android-build-${GITHUB_RUN_NUMBER}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/STAYCALM.apk dist/STAYCALM.apk.sha256 dist/STAYCALM-signing-certificate.sha256 --clobber
+          else
+            gh release create "$TAG" \
+              dist/STAYCALM.apk dist/STAYCALM.apk.sha256 dist/STAYCALM-signing-certificate.sha256 \
+              --target "${GITHUB_SHA}" \
+              --title "STAYCALM 4.1 - Podcast controls and permanent signing (build ${GITHUB_RUN_NUMBER})" \
+              --notes "Download STAYCALM.apk. This release uses the permanent pinned signing certificate and an increasing version code. Future releases using this same key update in place, preserving app data and login. Older APKs used temporary debug keys; the first migration may require a full ZIP backup and reinstall if their original key is unavailable. Unit/lint, Android UI, signature and install-over-existing-app retention checks passed." \
+              --latest
+          fi
+      - name: Signing setup required before publishing
+        if: github.event_name != 'pull_request' && env.STAYCALM_SIGNING_READY != 'true'
+        run: |
+          echo '::error::Release publishing is blocked. Add STAYCALM_KEYSTORE_BASE64 and STAYCALM_KEYSTORE_PASSWORD from your private signing setup, then run this workflow again. Test-only APKs are not permanent update builds.'
+          exit 1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -111,3 +134,6 @@ jobs:
             app/build/reports/
             ui-screenshots/
           retention-days: 14
+      - name: Remove temporary signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/staycalm-release.p12"
