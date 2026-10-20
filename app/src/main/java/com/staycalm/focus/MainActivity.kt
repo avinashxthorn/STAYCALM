@@ -106,6 +106,14 @@ class MainActivity:ComponentActivity(){
             val personalization=remember{Personalization(this@MainActivity)}
             val journal=remember{StudyJournal(this@MainActivity)}
             var isDark by remember{mutableStateOf(personalization.darkMode())}
+            SideEffect {
+                // Match Android status and gesture/navigation bars to the current STAYCALM mode.
+                window.statusBarColor = android.graphics.Color.parseColor(if(isDark) "#171717" else "#F8F9FA")
+                window.navigationBarColor = android.graphics.Color.parseColor(if(isDark) "#171717" else "#F8F9FA")
+                val controller=androidx.core.view.WindowCompat.getInsetsController(window,window.decorView)
+                controller.isAppearanceLightStatusBars = !isDark
+                controller.isAppearanceLightNavigationBars = !isDark
+            }
             var profileName by remember{mutableStateOf(personalization.name())}
             var profileSubject by remember{mutableStateOf(personalization.subject())}
             var draftName by remember{mutableStateOf(personalization.name())}
