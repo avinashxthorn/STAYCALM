@@ -47,6 +47,7 @@ fun StudioFocus(
     val timerGlowAlpha by ambientMotion.animateFloat(initialValue=.08f,targetValue=.16f,
         animationSpec=infiniteRepeatable(tween(1800,easing=EaseInOutSine),RepeatMode.Reverse),
         label="timer calm pulse")
+    val darkTheme=LocalStaycalmDark.current
     val active=running || progress>0f
     var custom by remember{mutableStateOf(false)}
     var customMinutes by remember(durationMinutes){mutableFloatStateOf(durationMinutes.toFloat())}
@@ -74,12 +75,12 @@ fun StudioFocus(
                     Canvas(Modifier.fillMaxSize().clearAndSetSemantics{}){
                         val radius=size.minDimension*.44f
                         drawCircle(roseInk.copy(alpha=if(running)timerGlowAlpha else .07f),radius=radius*.87f)
-                        drawCircle(if(LocalStaycalmDark.current) Color(0xFF45534E) else Color(0xFFD7E9E2),radius=radius,style=Stroke(5.dp.toPx()))
+                        drawCircle(if(darkTheme) Color(0xFF45534E) else Color(0xFFD7E9E2),radius=radius,style=Stroke(5.dp.toPx()))
                         for(i in 0 until 60){
                             val a=(i*6-90)*PI.toFloat()/180f
                             val r=radius-14.dp.toPx()
                             val length=if(i%5==0)7.dp.toPx() else 3.dp.toPx()
-                            drawLine((if(LocalStaycalmDark.current) Color(0xFF8EA79C) else Color(0xFF8BA99C)).copy(alpha=if(i%5==0).7f else .35f),center+Offset(cos(a)*r,sin(a)*r),center+Offset(cos(a)*(r-length),sin(a)*(r-length)),2f)
+                            drawLine((if(darkTheme) Color(0xFF8EA79C) else Color(0xFF8BA99C)).copy(alpha=if(i%5==0).7f else .35f),center+Offset(cos(a)*r,sin(a)*r),center+Offset(cos(a)*(r-length),sin(a)*(r-length)),2f)
                         }
                         drawArc(roseInk,-90f,360f*animatedProgress,false,Offset(center.x-radius,center.y-radius),Size(radius*2,radius*2),style=Stroke(5.dp.toPx(),cap=StrokeCap.Round))
                         val angle=(animatedProgress*360-90)*PI.toFloat()/180f
