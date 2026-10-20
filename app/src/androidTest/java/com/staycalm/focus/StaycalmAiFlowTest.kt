@@ -20,20 +20,20 @@ class StaycalmAiFlowTest {
     @get:Rule val ui = createAndroidComposeRule<MainActivity>()
     private var previous: String? = null
     private val owner = "ai-flow-${UUID.randomUUID()}"
-    @Before fun reset() = ui.runOnUiThread {
+    @Before fun reset() { ui.runOnUiThread {
         val app = ui.activity.application as AccountTestApplication
         previous = app.identity
         app.identity = owner
         AccountData.finishLogin(ui.activity)
         AccountData.preferences(ui.activity).edit().clear().commit()
-    }
-    @After fun cleanup() = ui.runOnUiThread {
+    } }
+    @After fun cleanup() { ui.runOnUiThread {
         val context = ui.activity
         FocusStore(context).tasks().forEach { FocusAlarms.cancelTask(context, it.id) }
         AccountData.preferencesFor(context, owner).edit().clear().commit()
         (context.application as AccountTestApplication).identity = previous
         CloudBackup.bindAccount()
-    }
+    } }
     private fun mount() = ui.runOnUiThread {
         ui.activity.setContent {
             MaterialTheme { Column(Modifier.verticalScroll(rememberScrollState())) { StaycalmAiCard {} } }
