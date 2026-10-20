@@ -290,6 +290,8 @@ internal fun FocusMediaHub(
             }
             if (audio.id == "podcast") PodcastPlayerControls(audio) { command, position ->
                 if (command == "stop") SoundService.clearPodcast(context)
+                else if (command == "play" && audio.error != null && audio.sourceUrl != null)
+                    playPodcast(PodcastEpisode(audio.title, audio.sourceUrl))
                 else {
                     val intent = Intent(context, SoundService::class.java).setAction(command)
                     position?.let { intent.putExtra("position", it) }

@@ -268,8 +268,9 @@ class SoundService:Service(){
         releasePlayer()
         audio.abandonAudioFocusRequest(focusRequest)
         session.isActive=false;session.release()
-        val error=AudioPlayback.state.error
-        AudioPlayback.state=AudioStatus(error=error)
+        val previous=AudioPlayback.state
+        AudioPlayback.state=if(previous.id=="podcast" && previous.error!=null)
+            previous.copy(playing=false,loading=false) else AudioStatus(error=previous.error)
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
