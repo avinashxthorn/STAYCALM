@@ -1,3 +1,21 @@
+# Version 3.9: planner file recovery and simple login
+
+Existing project owners: **publish the updated `firestore.rules` from this repository before syncing planner attachments**. The earlier rules allow structured backups but deny the new owner-only `users/{uid}/plannerFiles/{fileId}/chunks/{index}` path. Your existing email/password setup and project config stay the same.
+
+After updating the app, use **Your account → Sync now** once on the phone containing the original planner attachments. Wait for success before removing local files or changing phones. Old 3.8 backups cannot recover files that were never uploaded. New recovery copies reference only completed, checksum-verified file uploads.
+
+Planner file bytes are stored as 512 KiB Firestore binary chunks under each verified account. Uploads checkpoint every eight chunks and resume after interruption. Limits are 80 MiB per file and 160 MiB of current planner files per device recovery copy. The entire project's free Firestore quota is still shared: 1 GiB stored plus daily operations and monthly network quotas. Spark remains usable without billing, but exceeding quotas pauses cloud access; it does not provide unlimited file hosting. Completed chunks and older device copies are retained until the owner removes them through the console. Imported audio stays in full ZIP exports.
+
+In **Firestore → Indexes → Automatic → Add exemption**, keep `backups` / `payload` disabled, and optionally add `chunks` / `data` with every index disabled. The checked-in `firestore.indexes.json` defines both. These exemptions avoid unnecessary index storage; do not disable the `updatedAt` index used to find recent recovery copies.
+
+The initial flow is now: **three intro slides → Get started → Login or Sign up → automatic cloud recovery on a fresh verified login → profile setup if needed → home**. Existing local work is never automatically replaced on login. A failed fresh-install restore stays on a recovery screen with Retry and an explicit Continue without restoring option. Profile and account settings show Login successful. Logout retains local data and stops automatic cloud uploads.
+
+Cloud restore downloads every referenced planner file from the server into staging, verifies expected length and SHA-256, and only then installs file lists and structured progress. Missing, partial or corrupted files abort restore before replacing existing preferences. A local cache is used to open attachments offline; deleting/uninstalling that cache no longer loses successfully synced planner files. Cloud copies are recovery checkpoints, not live concurrent editing across phones.
+
+Before installing a differently signed build, **export a full ZIP from the old app and save it outside the phone**. The existing build workflow uses temporary debug signing keys, so an update may require a separately planned migration; never uninstall while unsynced planner files are still only local. Full ZIP imports preserve existing planner files so they can be synced from the new app after login.
+
+---
+
 # STAYCALM accounts and backup — phone setup
 
 The code is ready for your own Firebase project. The GitHub connection does not authorize access to your Google/Firebase account; the project owner must complete the console steps below. No desktop-only ChatGPT connector or Android Studio is needed for these console steps. If a console panel is cramped on mobile, use Chrome's Desktop site layout (this does not unlock desktop-only ChatGPT plugins).
@@ -58,7 +76,7 @@ After the Android configuration is supplied, run GitHub → STAYCALM → Actions
 - Test Export full backup and Restore from backup file with a test PDF and imported audio file before relying on it. Keep the exported ZIP outside the phone (for example in Google Drive). The ZIP contains private data and is not encrypted by the app.
 - Confirm a second account cannot find the first account's backups. The CI Firestore emulator tests also cover cross-account access, verified-email requirements and document validation.
 
-## What is backed up
+## What version 3.8 backed up (historical)
 
 | Data | Firebase cloud copy | Full ZIP export |
 | --- | --- | --- |

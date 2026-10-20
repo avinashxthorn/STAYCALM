@@ -54,12 +54,15 @@ private val introCaptions = listOf("01 / A CALMER START", "02 / YOUR STUDY STORY
 @Composable
 fun FirstRunOnboarding(
     onAccount: () -> Unit = {},
+    startAtProfile: Boolean = false,
+    signedInEmail: String? = null,
     onFinish: (name: String, subject: String, goalMinutes: Int, quoteMinutes: Int) -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
     val pager = rememberPagerState(pageCount = { 3 })
     val scope = rememberCoroutineScope()
-    var profileStep by rememberSaveable { mutableStateOf(false) }
+    var profileStep by rememberSaveable { mutableStateOf(startAtProfile) }
+    LaunchedEffect(startAtProfile) { if (startAtProfile) profileStep = true }
     var name by rememberSaveable { mutableStateOf("") }
     var subject by rememberSaveable { mutableStateOf("") }
     var goal by rememberSaveable { mutableIntStateOf(120) }
@@ -82,16 +85,11 @@ fun FirstRunOnboarding(
             Text("staycalm.", fontWeight = FontWeight.ExtraBold, fontSize = 23.sp,
                 color = scheme.primary, letterSpacing = (-0.7).sp)
             Spacer(Modifier.weight(1f))
-            if (!profileStep) {
-                TextButton(onClick = { profileStep = true }) {
-                    Text("Skip", color = scheme.onSurfaceVariant)
-                }
-            } else {
+            if (profileStep) {
                 Text("YOUR SPACE", fontSize = 10.sp, fontWeight = FontWeight.Bold,
                     letterSpacing = 1.5.sp, color = scheme.primary)
             }
         }
-        TextButton(onClick = onAccount) { Text("Log in / Restore") }
         if (!profileStep) {
             HorizontalPager(
                 state = pager,
@@ -148,7 +146,7 @@ fun FirstRunOnboarding(
                 }
                 Button(
                     onClick = {
-                        if (pager.currentPage == 2) profileStep = true
+                        if (pager.currentPage == 2) { if (startAtProfile) profileStep = true else onAccount() }
                         else scope.launch { pager.animateScrollToPage(pager.currentPage + 1) }
                     },
                     modifier = Modifier.weight(1f).height(54.dp),
@@ -181,6 +179,10 @@ fun FirstRunOnboarding(
                         Icon(Icons.Rounded.Favorite, null, tint = scheme.primary,
                             modifier = Modifier.size(43.dp))
                     }
+                }
+                signedInEmail?.let {
+                    Text("✓ Login successful", color = scheme.primary, fontWeight = FontWeight.SemiBold)
+                    Text(it, color = scheme.onSurfaceVariant, fontSize = 12.sp)
                 }
                 Text("Let's make it yours.", fontSize = 30.sp, lineHeight = 34.sp,
                     fontWeight = FontWeight.ExtraBold, letterSpacing = (-1).sp,
@@ -235,7 +237,7 @@ fun FirstRunOnboarding(
                         )
                     }
                 }
-                Text("Your details stay on this device. You can change them in Settings.",
+                Text("Your profile joins your account backup when cloud sync is enabled.",
                     fontSize = 11.sp, color = scheme.onSurfaceVariant)
                 Button(
                     onClick = { onFinish(name.trim(), subject.trim(), goal, quotes) },

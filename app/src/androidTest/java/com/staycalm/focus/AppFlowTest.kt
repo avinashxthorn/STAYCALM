@@ -1,5 +1,6 @@
 package com.staycalm.focus
 
+import androidx.activity.compose.setContent
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.SystemClock
@@ -50,8 +51,9 @@ class AppFlowTest {
     @Test fun accountAndRecoveryScreenIsReachable(){
         ui.onNodeWithText("Settings").performClick()
         ui.onNodeWithText("Account & backup").performScrollTo().performClick()
-        ui.onNodeWithText("Full file backup").performScrollTo().assertIsDisplayed()
-        ui.onNodeWithText("Export full backup").performScrollTo().assertIsDisplayed()
+        ui.onNodeWithText("Welcome back").assertIsDisplayed()
+        ui.onNodeWithText("Email").assertIsDisplayed()
+        ui.onNodeWithText("Export full backup").assertDoesNotExist()
         screenshot("11-account-backup")
     }
     @Test fun fullBackupRestoresPlansJournalAndImportedAudio(){
@@ -194,51 +196,59 @@ class AppFlowTest {
         assertEquals(180,restored.interval())
         restored.setInterval(0)
     }
-    @Test fun threeSwipePagesLeadToSeparateProfileAndPersist() {
+    @Test fun threeSwipePagesLeadToSimpleLoginAfterGetStarted() {
         ui.runOnUiThread {
             ui.activity.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE)
-                .edit().remove("profile_ready").commit()
+                .edit().remove("profile_ready").remove("intro_done").commit()
         }
         ui.activityRule.scenario.recreate()
         ui.onNodeWithText("Find your focus.").assertIsDisplayed()
-        ui.onNodeWithText("Let your focus bloom.").assertDoesNotExist()
+        ui.onNodeWithText("Log in / Restore").assertDoesNotExist()
+        ui.onNodeWithTag("simple-login").assertDoesNotExist()
         screenshot("00-onboarding-focus")
-        // Verify a physical swipe, not just Next button navigation.
         ui.onNodeWithTag("onboarding-pager").performTouchInput { swipeLeft() }
         ui.onNodeWithText("Keep every little win.").assertIsDisplayed()
-        screenshot("00-onboarding-journal")
         ui.onNodeWithText("Next").performClick()
         ui.onNodeWithText("Grow at your own pace.").assertIsDisplayed()
         ui.onNodeWithText("Get started").performClick()
+        ui.onNodeWithTag("simple-login").assertIsDisplayed()
+        ui.onNodeWithText("Welcome back").assertIsDisplayed()
+        ui.onNodeWithText("Email").assertIsDisplayed()
+        ui.onNodeWithText("Password").assertIsDisplayed()
+        ui.onNodeWithText("Export full backup").assertDoesNotExist()
+        screenshot("00-simple-login")
+        ui.onNodeWithText("Sign up").performClick()
+        ui.onNodeWithText("Create your account").assertIsDisplayed()
+        ui.onNodeWithText("Confirm password").assertIsDisplayed()
+        screenshot("00-simple-signup")
+        ui.onNodeWithText("← Back").performClick()
+        ui.onNodeWithText("Find your focus.").assertIsDisplayed()
+    }
+    @Test fun separateProfileFormStillSavesPreferences() {
+        ui.runOnUiThread {
+            ui.activity.setContent {
+                androidx.compose.material3.MaterialTheme {
+                    FirstRunOnboarding(startAtProfile=true, onFinish={ name, subject, goal, interval ->
+                        Personalization(ui.activity).saveProfile(name,subject)
+                        Personalization(ui.activity).setInterval(interval)
+                        FocusStore(ui.activity).setDailyGoal(goal)
+                    })
+                }
+            }
+        }
         ui.onNodeWithText("Let's make it yours.").assertIsDisplayed()
-        screenshot("00-onboarding-profile")
         ui.onNodeWithText("Start my journey").assertIsNotEnabled()
         ui.onNodeWithTag("onboarding-name").performTextInput("Learner")
         ui.onNodeWithTag("onboarding-subject").performTextInput("Veterinary science")
         ui.onNodeWithText("Start my journey").performScrollTo().performClick()
-        ui.onNodeWithText("Let your focus bloom.").assertIsDisplayed()
-        ui.runOnUiThread {
-            val profile = Personalization(ui.activity)
-            assertTrue(profile.isReady())
-            assertEquals("Learner", profile.name())
-            assertEquals("Veterinary science", profile.subject())
-            assertEquals(120, FocusStore(ui.activity).dailyGoal())
-        }
-        ui.activityRule.scenario.recreate()
-        ui.onNodeWithText("Find your focus.").assertDoesNotExist()
-        ui.onNodeWithText("Let your focus bloom.").assertIsDisplayed()
-    }
-    @Test fun onboardingSkipOpensProfileNotHome() {
-        ui.runOnUiThread {
-            ui.activity.getSharedPreferences("staycalm_v2",Context.MODE_PRIVATE)
-                .edit().remove("profile_ready").commit()
-        }
-        ui.activityRule.scenario.recreate()
-        ui.onNodeWithText("Skip").performClick()
+        assertEquals("Learner",Personalization(ui.activity).name())
+        assertEquals("Veterinary science",Personalization(ui.activity).subject())
+        assertEquals(120,FocusStore(ui.activity).dailyGoal())
+        ui.onNodeWithContentDescription("Back to introduction").performScrollTo().performClick()
+        ui.onNodeWithText("Next").performClick()
+        ui.onNodeWithText("Next").performClick()
+        ui.onNodeWithText("Get started").performClick()
         ui.onNodeWithText("Let's make it yours.").assertIsDisplayed()
-        ui.onNodeWithText("Let your focus bloom.").assertDoesNotExist()
-        ui.onNodeWithContentDescription("Back to introduction").performClick()
-        ui.onNodeWithText("Find your focus.").assertIsDisplayed()
     }
     @Test fun playerPausesLoopsAndStopsAtSessionEnd(){
         fun command(action:String,position:Long=0){ui.runOnUiThread{

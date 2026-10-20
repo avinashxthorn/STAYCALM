@@ -1,3 +1,7 @@
+## Simple login and cloud planner files (3.9.0)
+
+Get started after the three intro slides opens a short Login/Sign up screen. Verified accounts on fresh installations recover their latest cloud copy before profile/home. Account and profile screens show successful login. Planner attachments now upload through resumable, owner-only Firestore chunks and restore from cloud bytes with length/SHA-256 checks; limits are 80 MiB per file and 160 MiB per copy within shared Spark quotas. **Existing Firebase projects must publish the updated firestore.rules before file sync.** See [setup and migration](FIREBASE-SETUP.md). Imported audio also remains available through full ZIP backup.
+
 ## Email accounts and recoverable backups (3.8.0)
 
 STAYCALM now supports optional Firebase email/password accounts, opt-in per-device cloud copies for structured progress, and full ZIP export/import including local files. See [phone-friendly Firebase setup](FIREBASE-SETUP.md). Cloud features require your Firebase Android client configuration, enabled Email/Password sign-in and published owner-only Firestore rules. Builds without configuration remain local-only. SMS login is intentionally excluded because it requires billing.
@@ -20,7 +24,7 @@ A native Android focus companion in a cohesive pink theme. Kotlin, Jetpack Compo
 - Optional Do Not Disturb and precise session alerts, subject to Android permissions.
 - Local-first storage with optional email accounts and opt-in cloud recovery; no analytics trackers. Optional embedded YouTube and HTTPS podcast playback require internet; video playback connects to YouTube, RSS podcast feeds connect to their publishers.
 
-## Build and download (v3.8.0)
+## Build and download (v3.9.0)
 
 **Mobile-friendly download:** After the latest GitHub Actions build succeeds, open [STAYCALM Releases](https://github.com/avinashxthorn/STAYCALM/releases/latest), expand **Assets**, and download **STAYCALM.apk**. This is a real, installable APK, **not** a ZIP file. Do not choose **Source code (zip)** or **Source code (tar.gz)**.
 
