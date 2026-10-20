@@ -1,3 +1,7 @@
+## Email accounts and recoverable backups (3.8.0)
+
+STAYCALM now supports optional Firebase email/password accounts, opt-in per-device cloud copies for structured progress, and full ZIP export/import including local files. See [phone-friendly Firebase setup](FIREBASE-SETUP.md). Cloud features require your Firebase Android client configuration, enabled Email/Password sign-in and published owner-only Firestore rules. Builds without configuration remain local-only. SMS login is intentionally excluded because it requires billing.
+
 # STAYCALM · Bloom 3.1
 
 A native Android focus companion in a cohesive pink theme. Kotlin, Jetpack Compose, Material 3. Android 8.0+.

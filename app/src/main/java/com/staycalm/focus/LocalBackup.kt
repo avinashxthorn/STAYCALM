@@ -51,6 +51,7 @@ object LocalBackup {
             ZipInputStream(input).use { zip ->
                 while (true) {
                     val entry = zip.nextEntry ?: break
+                    require(entries.size < 10_000) { "Too many files in this backup." }
                     require(entries.add(entry.name)) { "Duplicate backup file." }
                     require(entry.name == "staycalm.json" || safeFile(entry.name)) { "This is not a STAYCALM backup." }
                     require(!entry.isDirectory)

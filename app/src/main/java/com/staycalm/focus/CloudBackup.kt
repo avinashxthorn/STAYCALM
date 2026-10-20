@@ -50,7 +50,7 @@ object CloudBackup {
     fun enable() {
         val user = auth().currentUser ?: error("Sign in first.")
         require(user.isEmailVerified) { "Verify your email first, then tap Check verification." }
-        check(meta.edit().putString("owner", user.uid).remove("hash").commit())
+        check(meta.edit().putString("owner", user.uid).remove("hash").putString("status", "Backup enabled. Waiting for the first confirmed cloud upload.").commit())
         schedule()
     }
     fun disable() {
@@ -73,20 +73,23 @@ object CloudBackup {
             .setConstraints(constraints).setInputData(input).build()
         WorkManager.getInstance(app).enqueueUniquePeriodicWork("$WORK-periodic", ExistingPeriodicWorkPolicy.KEEP, periodic)
     }
+    private fun hash(payload: String) = MessageDigest.getInstance("SHA-256").digest(payload.toByteArray()).joinToString("") { "%02x".format(it) }
+    fun needsUpload() = hash(payload()) != meta.getString("hash", null)
     suspend fun upload(expectedUid: String, force: Boolean = false) {
         val user = auth().currentUser ?: error("Sign in to back up.")
         require(enabled() && user.uid == expectedUid && user.isEmailVerified) { "Cloud backup is not enabled for this account." }
-        val payload = payload()
-        BackupSnapshot.decode(payload)
-        val hash = MessageDigest.getInstance("SHA-256").digest(payload.toByteArray()).joinToString("") { "%02x".format(it) }
+        val snapshotString = payload()
+        BackupSnapshot.decode(snapshotString)
+        val hash = hash(snapshotString)
         if (!force && hash == meta.getString("hash", null)) return
         val ref = FirebaseFirestore.getInstance().collection("users").document(user.uid).collection("backups").document(deviceId())
-        ref.set(mapOf("schema" to 1, "payload" to payload, "label" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".take(100),
-            "updatedAt" to FieldValue.serverTimestamp())).await()
+        try { kotlinx.coroutines.withTimeout(30_000) { ref.set(mapOf("schema" to 1, "payload" to snapshotString, "label" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".take(100),
+            "updatedAt" to FieldValue.serverTimestamp())).await() } }
+        catch (_: kotlinx.coroutines.TimeoutCancellationException) { error("Upload not confirmed yet. Check your connection and try again") }
         // Never let a callback after logout change the next account's status/hash.
         if (enabled() && auth().currentUser?.uid == expectedUid) {
             meta.edit().putString("hash", hash).putString("status", "Last cloud backup: ${java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("d MMM, HH:mm"))}").apply()
-            if (payload != payload()) schedule()
+            if (snapshotString != payload()) schedule()
         }
     }
     suspend fun copies(): List<CloudCopy> {
@@ -129,8 +132,13 @@ class CloudBackupWorker(context: Context, params: WorkerParameters) : CoroutineW
     override suspend fun doWork(): Result {
         val uid = inputData.getString("uid") ?: return Result.failure()
         if (!CloudBackup.ready() || !CloudBackup.enabled() || CloudBackup.auth().currentUser?.uid != uid) return Result.success()
-        return try { CloudBackup.upload(uid); Result.success() }
+        return try {
+            CloudBackup.upload(uid)
+            // Changes arriving during the network request must receive another attempt.
+            if (CloudBackup.enabled() && CloudBackup.needsUpload()) Result.retry() else Result.success()
+        }
         catch (error: Exception) {
+            if (error is kotlinx.coroutines.CancellationException) throw error
             CloudBackup.failure(error.localizedMessage ?: "Check internet and Firebase setup")
             if (error is IllegalArgumentException) Result.failure() else Result.retry()
         }

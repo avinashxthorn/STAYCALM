@@ -82,7 +82,6 @@ fun FirstRunOnboarding(
             Text("staycalm.", fontWeight = FontWeight.ExtraBold, fontSize = 23.sp,
                 color = scheme.primary, letterSpacing = (-0.7).sp)
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = onAccount) { Text("Log in / Restore") }
             if (!profileStep) {
                 TextButton(onClick = { profileStep = true }) {
                     Text("Skip", color = scheme.onSurfaceVariant)
@@ -92,6 +91,7 @@ fun FirstRunOnboarding(
                     letterSpacing = 1.5.sp, color = scheme.primary)
             }
         }
+        TextButton(onClick = onAccount) { Text("Log in / Restore") }
         if (!profileStep) {
             HorizontalPager(
                 state = pager,
