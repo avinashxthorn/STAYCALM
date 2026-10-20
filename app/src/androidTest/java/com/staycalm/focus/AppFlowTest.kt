@@ -492,16 +492,25 @@ class AppFlowTest {
                 val store=FocusStore(ui.activity)
                 store.setLockTimerNotification(true);store.configure(60,mode=mode);store.start()
             }
-            ui.waitUntil(5_000){notice()?.flags?.and(android.app.Notification.FLAG_FOREGROUND_SERVICE)!=0 && notice()!=null}
-            assertTrue(notice()!!.flags and android.app.Notification.FLAG_ONGOING_EVENT != 0)
-            assertTrue(notice()!!.extras.getBoolean(android.app.Notification.EXTRA_CHRONOMETER_COUNT_DOWN))
+            var locked:android.app.Notification?=null
+            ui.waitUntil(5_000){
+                notice()?.takeIf{it.flags and android.app.Notification.FLAG_FOREGROUND_SERVICE != 0}
+                    ?.also{locked=it}!=null
+            }
+            assertTrue(locked!!.flags and android.app.Notification.FLAG_ONGOING_EVENT != 0)
+            assertTrue(locked!!.extras.getBoolean(android.app.Notification.EXTRA_CHRONOMETER_COUNT_DOWN))
             // Simulate Android delivering the swipe's delete intent, then clearing the alert.
-            ui.runOnUiThread{notice()!!.deleteIntent.send();manager.cancel(1002)}
+            ui.runOnUiThread{locked!!.deleteIntent.send();manager.cancel(1002)}
             ui.waitUntil(5_000){notice()!=null}
             ui.runOnUiThread{FocusStore(ui.activity).setLockTimerNotification(false)}
-            ui.waitUntil(5_000){notice()!=null && notice()!!.flags and android.app.Notification.FLAG_FOREGROUND_SERVICE == 0}
-            assertEquals(0,notice()!!.flags and android.app.Notification.FLAG_ONGOING_EVENT)
-            assertNull(notice()!!.deleteIntent)
+            var unlocked:android.app.Notification?=null
+            ui.waitUntil(5_000){
+                // Android can remove/repost between reads; inspect one immutable observation.
+                notice()?.takeIf{it.flags and android.app.Notification.FLAG_FOREGROUND_SERVICE == 0}
+                    ?.also{unlocked=it}!=null
+            }
+            assertEquals(0,unlocked!!.flags and android.app.Notification.FLAG_ONGOING_EVENT)
+            assertNull(unlocked!!.deleteIntent)
             ui.runOnUiThread{manager.cancel(1002)}
             Thread.sleep(1_200)
             assertNull(notice())
