@@ -19,7 +19,7 @@ import java.time.LocalTime
 val LocalStaycalmDark = compositionLocalOf { false }
 
 class Personalization(private val context: Context) {
-    private val preferences = context.getSharedPreferences("staycalm_v2", Context.MODE_PRIVATE)
+    private val preferences = AccountData.preferences(context)
     fun isReady(): Boolean = preferences.getBoolean("profile_ready", false)
     fun name(): String = preferences.getString("profile_name", "")?.trim().orEmpty()
     fun subject(): String = preferences.getString("profile_subject", "my studies")?.trim().orEmpty().ifBlank { "my studies" }
@@ -70,6 +70,7 @@ object MotivationAlarms {
         context, REQUEST_CODE, Intent(context, QuoteReceiver::class.java).setAction(ACTION),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
+    fun cancel(context: Context) { alarm(context).cancel(pending(context)) }
     /** Inexact by design: Android may defer delivery while the phone is idle. */
     fun schedule(context: Context) {
         val pi = pending(context)

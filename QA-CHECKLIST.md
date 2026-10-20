@@ -1,3 +1,15 @@
+# Version 4.0 account privacy regression checks
+
+- Log out from Insights/Settings and confirm only Login/intro is reachable, including after Activity recreation/Back.
+- Account A adds a planner file and history; account B must see none of A's files, logs, profile or sync status. Return to A and verify its private cache remains.
+- Restore a completed history snapshot and check session IDs/intention/minutes, rewards and the Insights screen.
+- A running or paused session prevents logout; finish or End session first.
+- Sign up -> verification -> refresh token -> cloud recovery -> profile/home. Wrong credentials/reset/network errors remain clear without revealing account existence.
+- Sync and log out must remain signed in if cloud upload fails. Log out without syncing retains only that account's local cache.
+- Upgrade a signed-in 3.9 installation with planner and audio files and confirm migration to the same UID; do not assign an old signed-out installation's data to a different login.
+
+---
+
 # Bloom 3.0 validation
 
 ## Automated gates

@@ -1,3 +1,18 @@
+# Version 4.0: account privacy and history
+
+Keep the 3.9 `firestore.rules` already supplied. No new Firebase products or billing are required.
+
+- **History and Insights:** cloud snapshots contain completed session logs (`logs`) plus rewards and preferences. Insights are recomputed from restored logs: Today, All time, session count, streak, last seven days, turtle stage and recent sessions.
+- **Logout:** private screens disappear and Login is shown. Each UID has its own local files/preferences and backup metadata. Same-account caches reopen after login; another account starts with its own data. Logout stops account notifications/playback and revokes app file-sharing grants.
+- **Pending changes:** if automatic sync is enabled and changes are pending, the logout dialog offers Sync and log out. Failed sync keeps you signed in so you can retry. Log out without syncing retains the private cache, but those changes cannot recover on another phone until uploaded.
+- **Cloud consent:** Login/Sign up includes Save my progress and planner files in the cloud. Checked enables automatic sync after verified recovery; unchecked keeps uploads off. Failed/skipped recovery never turns uploads on.
+- **Verification:** new users must open the verification email, then tap I've verified my email. The app refreshes the ID token before verified-only Firestore access. Existing verified login restores an empty installation before opening home; existing account caches are retained so offline/unsynced work is not overwritten.
+- **Upgrade:** stay signed in on the old app when updating with the same signing certificate; its shared data is migrated once to that UID. Unclaimed data left by an older signed-out installation is preserved privately, never assigned automatically to another login. Restore from cloud or import your earlier full ZIP. Always export a ZIP before an uninstall/signature migration.
+
+Research: https://firebase.google.com/docs/auth/android/password-auth ; https://firebase.google.com/docs/auth/android/manage-users ; https://firebase.google.com/docs/firestore/manage-data/enable-offline . Firestore uses memory-only SDK cache; the app's owner-specific local files remain available offline after login.
+
+---
+
 # Version 3.9: planner file recovery and simple login
 
 Existing project owners: **publish the updated `firestore.rules` from this repository before syncing planner attachments**. The earlier rules allow structured backups but deny the new owner-only `users/{uid}/plannerFiles/{fileId}/chunks/{index}` path. Your existing email/password setup and project config stay the same.

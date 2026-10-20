@@ -62,7 +62,7 @@ class CloudPlannerFiles(private val context: Context) {
         val store = FirestorePlannerChunkStore(uid)
         items.forEachIndexed { index, item ->
             status("Uploading planner file ${index + 1}/${items.size}: ${item.name}")
-            PlannerFileTransfer.upload(item.id, File(context.filesDir, "journal/${item.id}"), item.size, store) { sent, total ->
+            PlannerFileTransfer.upload(item.id, File(AccountData.rootFor(context, uid), "journal/${item.id}"), item.size, store) { sent, total ->
                 status("Uploading ${item.name}: ${sent * 100 / total}%")
             }
         }
@@ -84,14 +84,14 @@ class CloudPlannerFiles(private val context: Context) {
             require(!SessionUninstallGuard.unfinished(FocusStore(context).state())) { "Finish your timer before restoring." }
             // Validate every file before publishing file lists or replacing existing planner data.
             items?.forEach { item ->
-                val target = File(context.filesDir, "journal/${item.id}")
+                val target = File(AccountData.rootFor(context, uid), "journal/${item.id}")
                 require(!target.exists() || PlannerFileTransfer.digest(target) == PlannerFileTransfer.digest(File(staging, item.id))) { "A local file conflicts with this cloud copy. Export it before restoring on a different installation." }
             }
             items?.forEach { item ->
-                val target = File(context.filesDir, "journal/${item.id}")
+                val target = File(AccountData.rootFor(context, uid), "journal/${item.id}")
                 if (!target.exists()) { target.parentFile!!.mkdirs(); File(staging, item.id).copyTo(target) }
             }
-            CloudBackup.restore(payload, fileLists = if (array == null) emptyMap() else mapOf("study_attachments" to array.toString()))
+            CloudBackup.restore(payload, expectedUid = uid, fileLists = if (array == null) emptyMap() else mapOf("study_attachments" to array.toString()))
         } finally { staging.deleteRecursively() }
     }
 }

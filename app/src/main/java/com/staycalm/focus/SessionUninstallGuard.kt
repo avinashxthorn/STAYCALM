@@ -10,7 +10,7 @@ import android.content.Intent
 object SessionUninstallGuard {
     private const val PENDING = "session_admin_pending_until"
     private const val RELEASING = "session_admin_releasing"
-    private fun prefs(context: Context) = context.getSharedPreferences("staycalm_v2", Context.MODE_PRIVATE)
+    private fun prefs(context: Context) = AccountData.preferences(context)
     fun component(context: Context) = ComponentName(context, SessionAdminReceiver::class.java)
     fun active(context: Context): Boolean = runCatching {
         context.getSystemService(DevicePolicyManager::class.java).isAdminActive(component(context))

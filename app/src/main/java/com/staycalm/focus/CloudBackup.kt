@@ -15,7 +15,9 @@ import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-class StaycalmApplication : Application() {
+open class StaycalmApplication : Application() {
+    open fun accountUid(): String? = if (FirebaseApp.getApps(this).isEmpty()) null else FirebaseAuth.getInstance().currentUser?.uid
+    open fun verifiedAccountUid(): String? = if (FirebaseApp.getApps(this).isEmpty()) null else FirebaseAuth.getInstance().currentUser?.takeIf { it.isEmailVerified }?.uid
     override fun onCreate() { super.onCreate(); CloudBackup.initialize(this) }
 }
 
@@ -32,11 +34,32 @@ object CloudBackup {
     }
     fun initialize(context: Context) {
         app = context.applicationContext
-        meta = app.getSharedPreferences("cloud_backup", Context.MODE_PRIVATE)
-        data = app.getSharedPreferences("staycalm_v2", Context.MODE_PRIVATE)
         if (FirebaseApp.getApps(app).isEmpty()) FirebaseApp.initializeApp(app)
+        AccountData.migrateLegacy(app)
+        bindAccount()
+        if (ready()) {
+            // Recovery always reads from the server; avoid persisting private backup blobs twice.
+            FirebaseFirestore.getInstance().firestoreSettings = com.google.firebase.firestore.FirebaseFirestoreSettings.Builder()
+                .setLocalCacheSettings(com.google.firebase.firestore.MemoryCacheSettings.newBuilder().build()).build()
+            var previousUid = AccountData.uid(app)
+            auth().addAuthStateListener {
+                val uid = AccountData.uid(app)
+                if (uid != previousUid) {
+                    app.getSystemService(android.app.NotificationManager::class.java).cancelAll()
+                    app.stopService(android.content.Intent(app, SoundService::class.java))
+                    app.stopService(android.content.Intent(app, TimerService::class.java))
+                    StudyVideoVisibility.background()
+                }
+                previousUid = uid
+                bindAccount(); schedule()
+            }
+        }
+    }
+    fun bindAccount() {
+        if (::data.isInitialized) data.unregisterOnSharedPreferenceChangeListener(listener)
+        data = AccountData.preferences(app)
+        meta = AccountData.metadata(app)
         data.registerOnSharedPreferenceChangeListener(listener)
-        if (ready()) auth().addAuthStateListener { schedule() }
     }
     fun ready() = FirebaseApp.getApps(app).isNotEmpty()
     fun auth(): FirebaseAuth = FirebaseAuth.getInstance()
@@ -45,10 +68,12 @@ object CloudBackup {
     fun deviceId(): String = meta.getString("device", null) ?: UUID.randomUUID().toString().also {
         check(meta.edit().putString("device", it).commit())
     }
-    fun payload(): String = org.json.JSONObject(BackupSnapshot.encode(data.all + mapOf(
-        "plans" to (data.getString("plans", "[]") ?: "[]"),
-        "logs" to (data.getString("logs", "[]") ?: "[]"))))
-        .put("plannerFiles", org.json.JSONArray(data.getString("study_attachments", "[]") ?: "[]")).toString()
+    fun payload(uid: String? = AccountData.uid(app)): String {
+        val values = AccountData.preferencesFor(app, uid).all
+        return org.json.JSONObject(BackupSnapshot.encode(values + mapOf(
+            "plans" to (values["plans"] ?: "[]"), "logs" to (values["logs"] ?: "[]"))))
+            .put("plannerFiles", org.json.JSONArray(values["study_attachments"] as? String ?: "[]")).toString()
+    }
     fun progress(message: String) { meta.edit().putString("status", message).apply() }
     fun errorMessage(error: Exception): String = if (error is kotlinx.coroutines.TimeoutCancellationException)
         "Cloud transfer paused. Check your connection and retry; completed parts are kept"
@@ -58,16 +83,21 @@ object CloudBackup {
         else error.localizedMessage ?: "Check your connection and try again"
     suspend fun restoreCloud(copy: CloudCopy) {
         val uid = auth().currentUser?.uid ?: error("Sign in first.")
-        CloudPlannerFiles(app).restore(uid, copy.payload, ::progress)
+        CloudPlannerFiles(app).restore(uid, copy.payload) { if (AccountData.uid(app) == uid) progress(it) }
     }
-    suspend fun recoverAfterLogin(): Boolean {
+    suspend fun recoverAfterLogin(enableSync: Boolean = false): Boolean {
+        bindAccount()
         // A first login on a fresh installation can safely recover without replacing local work.
-        if (!auth().currentUser!!.isEmailVerified || Personalization(app).isReady() ||
-            FocusStore(app).tasks().isNotEmpty() || FocusStore(app).logs().isNotEmpty() || StudyJournal(app).all().isNotEmpty()) return false
-        val latest = copies().firstOrNull() ?: return false
-        restoreCloud(latest)
-        enable()
-        return true
+        require(auth().currentUser?.isEmailVerified == true) { "Verify your email before opening your account." }
+        if (Personalization(app).isReady() ||
+            FocusStore(app).tasks().isNotEmpty() || FocusStore(app).logs().isNotEmpty() || StudyJournal(app).all().isNotEmpty()) {
+            if (enableSync) enable() else disable()
+            return false
+        }
+        val latest = copies().firstOrNull()
+        if (latest != null) restoreCloud(latest)
+        if (enableSync) enable() else disable()
+        return latest != null
     }
     fun enable() {
         val user = auth().currentUser ?: error("Sign in first.")
@@ -80,7 +110,22 @@ object CloudBackup {
         WorkManager.getInstance(app).cancelUniqueWork(WORK)
         WorkManager.getInstance(app).cancelUniqueWork("$WORK-periodic")
     }
-    fun signOut() { disable(); auth().signOut() }
+    fun signOut() {
+        require(!SessionUninstallGuard.unfinished(FocusStore(app).state())) { "Finish or end your current session before logging out." }
+        disable()
+        FocusStore(app).tasks().forEach { FocusAlarms.cancelTask(app, it.id) }
+        FocusAlarms.cancelFocus(app)
+        MotivationAlarms.cancel(app)
+        app.stopService(android.content.Intent(app, SoundService::class.java))
+        app.stopService(android.content.Intent(app, TimerService::class.java))
+        app.getSystemService(android.app.NotificationManager::class.java).cancelAll()
+        app.revokeUriPermission(android.net.Uri.parse("content://${app.packageName}.fileprovider/"), android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        StudyVideoVisibility.background()
+        AccountData.beginLogin(app)
+        check(AccountData.navigation(app).edit().putBoolean("intro_done", true).commit())
+        auth().signOut()
+        bindAccount()
+    }
     fun schedule() {
         if (!::meta.isInitialized || !enabled()) return
         val uid = auth().currentUser!!.uid
@@ -102,14 +147,15 @@ object CloudBackup {
         performUpload(expectedUid, force)
     }
     private suspend fun performUpload(expectedUid: String, force: Boolean) {
+        val accountMeta = meta
         val user = auth().currentUser ?: error("Sign in to back up.")
         require(enabled() && user.uid == expectedUid && user.isEmailVerified) { "Cloud backup is not enabled for this account." }
-        val snapshotString = payload()
+        val snapshotString = payload(expectedUid)
         BackupSnapshot.decode(snapshotString)
         val hash = hash(snapshotString)
-        if (!force && hash == meta.getString("hash", null)) return
+        if (!force && hash == accountMeta.getString("hash", null)) return
         val files = PlannerManifest.parse(org.json.JSONObject(snapshotString).getJSONArray("plannerFiles"))
-        CloudPlannerFiles(app).upload(expectedUid, files, ::progress)
+        CloudPlannerFiles(app).upload(expectedUid, files) { if (AccountData.uid(app) == expectedUid) progress(it) }
         require(enabled() && auth().currentUser?.uid == expectedUid) { "Cloud sync stopped because the account changed." }
         val ref = FirebaseFirestore.getInstance().collection("users").document(user.uid).collection("backups").document(deviceId())
         try { kotlinx.coroutines.withTimeout(30_000) { ref.set(mapOf("schema" to 1, "payload" to snapshotString, "label" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".take(100),
@@ -117,7 +163,7 @@ object CloudBackup {
         catch (_: kotlinx.coroutines.TimeoutCancellationException) { error("Upload not confirmed yet. Check your connection and try again") }
         // Never let a callback after logout change the next account's status/hash.
         if (enabled() && auth().currentUser?.uid == expectedUid) {
-            meta.edit().putString("hash", hash).putString("status", "Last cloud backup: ${java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("d MMM, HH:mm"))}").apply()
+            accountMeta.edit().putString("hash", hash).putString("status", "Last cloud backup: ${java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("d MMM, HH:mm"))}").apply()
             if (snapshotString != payload()) schedule()
         }
     }
@@ -130,17 +176,19 @@ object CloudBackup {
             .documents.map { CloudCopy(it.id, it.getString("label") ?: "Device", it.getTimestamp("updatedAt")?.toDate()?.time ?: 0,
                 it.getString("payload") ?: error("Incomplete cloud backup.")) }
     }
-    fun restore(payload: String, maxBytes: Int = BackupSnapshot.MAX_BYTES, fileLists: Map<String, String> = emptyMap()) {
+    fun restore(payload: String, maxBytes: Int = BackupSnapshot.MAX_BYTES, fileLists: Map<String, String> = emptyMap(), expectedUid: String? = AccountData.uid(app)) {
+        require(AccountData.uid(app) == expectedUid) { "The account changed. Restore was stopped." }
         require(fileLists.keys.all { it in setOf("study_attachments", "imported_audio") })
         val values = BackupSnapshot.decode(payload, maxBytes)
         require(!SessionUninstallGuard.unfinished(FocusStore(app).state())) { "Finish your timer before restoring a backup." }
         // Stop future uploads before replacing local state; no live timers/permission grants restored.
         disable()
         val previousPlans = FocusStore(app).tasks()
-        val editor = data.edit()
+        val editor = AccountData.preferencesFor(app, expectedUid).edit()
         BackupSnapshot.keys.forEach { editor.remove(it) }
         putValues(editor, values)
         fileLists.forEach { (key, value) -> editor.putString(key, value) }
+        require(AccountData.uid(app) == expectedUid) { "The account changed. Restore was stopped." }
         check(editor.commit()) { "Could not restore this backup. Your cloud copy is unchanged." }
         previousPlans.forEach { FocusAlarms.cancelTask(app, it.id) }
         FocusStore(app).tasks().filter { it.remind && !it.done }.forEach { FocusAlarms.scheduleTask(app, it) }
@@ -170,7 +218,7 @@ class CloudBackupWorker(context: Context, params: WorkerParameters) : CoroutineW
         }
         catch (error: Exception) {
             if (error is kotlinx.coroutines.CancellationException && error !is kotlinx.coroutines.TimeoutCancellationException) throw error
-            CloudBackup.failure(CloudBackup.errorMessage(error))
+            if (CloudBackup.auth().currentUser?.uid == uid) CloudBackup.failure(CloudBackup.errorMessage(error))
             if (error is IllegalArgumentException) Result.failure() else Result.retry()
         }
     }
