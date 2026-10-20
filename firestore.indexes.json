@@ -5,11 +5,6 @@
       "collectionGroup": "backups",
       "fieldPath": "payload",
       "indexes": []
-    },
-    {
-      "collectionGroup": "chunks",
-      "fieldPath": "data",
-      "indexes": []
     }
   ]
 }

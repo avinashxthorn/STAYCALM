@@ -151,7 +151,7 @@ fun LoginScreen(context: Context, onBack: () -> Unit, onSignedIn: (Boolean) -> U
                     }
                 }, enabled = !busy && resendSeconds == 0) { Text(if (resendSeconds > 0) "Resend in ${resendSeconds}s" else "Resend verification email") }
             } else if (!recoveryFailed) {
-                Text("Your plans, session history, insights and planner files stay with your account.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Your plans, session history and insights stay with your account.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     FilterChip(selected = !signingUp, onClick = { signingUp = false; password = ""; confirm = ""; visible = false; error = null }, label = { Text("Login") }, enabled = !busy)
                     FilterChip(selected = signingUp, onClick = { signingUp = true; password = ""; confirm = ""; visible = false; error = null }, label = { Text("Sign up") }, enabled = !busy)
@@ -174,7 +174,7 @@ fun LoginScreen(context: Context, onBack: () -> Unit, onSignedIn: (Boolean) -> U
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = cloudConsent, onCheckedChange = { cloudConsent = it }, enabled = !busy)
-                    Text("Save my progress and planner files in the cloud", style = MaterialTheme.typography.bodySmall)
+                    Text("Save my progress in the cloud", style = MaterialTheme.typography.bodySmall)
                 }
                 Button(onClick = { submit() }, enabled = !busy && email.isNotBlank() && password.isNotEmpty(),
                     shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().height(54.dp)) { Text(if (signingUp) "Create account" else "Log in") }
@@ -191,7 +191,7 @@ fun LoginScreen(context: Context, onBack: () -> Unit, onSignedIn: (Boolean) -> U
                     }
                 }, enabled = !busy, modifier = Modifier.align(Alignment.End)) { Text("Forgot password?") }
             } else {
-                Text("You are signed in. Cloud recovery could not finish. Retry to recover your plans, history, insights and files.")
+                Text("You are signed in. Cloud recovery could not finish. Retry to recover your plans, history and insights.")
                 Button(onClick = {
                     busy = true; error = null
                     scope.launch { try { recover() } catch (problem: Exception) { failure(problem) } finally { busy = false } }

@@ -118,14 +118,10 @@ No finite set of checks can guarantee an app has no defects on every Android dev
 - Never uninstall an existing build just to bypass a debug signing mismatch.
 
 
-## Version 3.9 login and planner cloud files
-- Fresh install: no login button appears above slides; three pages and Get started lead to simple email/password login.
-- Login/Sign up changes only the short auth form. No export/restore controls appear before authentication.
-- Verified login on an empty fresh install recovers latest profile, planner, history and cloud attachment bytes before home.
-- Interrupted fresh-install recovery remains retryable after restarting the Activity. Existing local work is never silently replaced.
-- Profile and account manager show Login successful and the signed-in email.
-- Update Firebase rules, sync an existing PDF, remove the source local file in a test installation, and recover identical bytes from the cloud.
-- Partial chunks/checksum failure never become a successful backup or replace existing planner/preferences.
-- Upload retries resume after the last atomic eight-chunk checkpoint. Complete files skip subsequent byte writes.
-- Verify cross-account and unverified access to file manifests and bytes is denied.
-- Confirm all limits are explicit; Spark quota failures retain local data and show pending sync.
+## Version 4.0.1 cloud file removal
+- Import a local planner file and confirm the cloud snapshot contains neither bytes nor attachment metadata.
+- File imports/removals do not change the cloud payload hash or schedule a progress backup by themselves.
+- Restore an older cloud payload with unavailable/over-limit file references; plans/history still restore, while local files and file lists are kept.
+- Full ZIP export/import still restores planner files and imported audio.
+- Updated rules deny legacy file manifests/chunks while still allowing verified-owner structured backups.
+- Login/account/privacy copy clearly distinguishes cloud progress from local files; no cloud file limit or download promise remains.

@@ -85,9 +85,9 @@ fun AccountScreen(context: Context, onClose: () -> Unit, onRestored: () -> Unit,
                 Text("Cloud sync", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text(CloudBackup.status())
                 if (CloudBackup.enabled() && CloudBackup.needsUpload()) Text("New changes are waiting to upload.", style = MaterialTheme.typography.bodySmall)
-                Text("Plans, completed session history, insights, rewards and planner files recover with your account.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Plans, completed session history, insights, profile and rewards recover with your account. Planner files and imported audio stay on this phone; export a full ZIP to move them.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Button(onClick = {
-                    if (CloudBackup.enabled()) runAction { CloudBackup.upload(user.uid, force = true); message = "Synced successfully: session history, insights, plans and planner files." }
+                    if (CloudBackup.enabled()) runAction { CloudBackup.upload(user.uid, force = true); message = "Synced successfully: plans, session history, insights, profile and rewards." }
                     else consent = true
                 }, enabled = !busy, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp)) {
                     Text(if (CloudBackup.enabled()) "Sync now" else "Enable cloud sync")
@@ -108,7 +108,7 @@ fun AccountScreen(context: Context, onClose: () -> Unit, onRestored: () -> Unit,
             if (more) {
                 HorizontalDivider()
                 Text("Full file backup", style = MaterialTheme.typography.titleMedium)
-                Text("Keep an extra ZIP copy of everything, including imported audio. Cloud planner files are limited to 80 MB each and 160 MB per copy, within your project's free quota.", style = MaterialTheme.typography.bodySmall)
+                Text("Export a ZIP to keep your planner files and imported audio along with your plans and progress. Files are not included in cloud sync.", style = MaterialTheme.typography.bodySmall)
                 OutlinedButton(onClick = { export.launch("STAYCALM-backup-${java.time.LocalDate.now()}.zip") }, enabled = !busy) { Text("Export full backup") }
                 OutlinedButton(onClick = { importConfirm = true }, enabled = !busy) { Text("Restore from backup file") }
                 if (CloudBackup.enabled()) TextButton(onClick = { CloudBackup.disable(); refresh++ }, enabled = !busy) { Text("Turn off automatic sync") }
@@ -120,11 +120,11 @@ fun AccountScreen(context: Context, onClose: () -> Unit, onRestored: () -> Unit,
         }
     }
     if (consent) AlertDialog(onDismissRequest = { consent = false }, title = { Text("Enable cloud sync?") },
-        text = { Text("Upload this device's plans, progress and planner files to ${user.email}. On a replacement phone, restore your previous cloud copy first. Imported audio remains in full file exports.") },
-        confirmButton = { TextButton(onClick = { consent = false; runAction { CloudBackup.enable(); CloudBackup.upload(user.uid, force = true); message = "Cloud sync is on. Planner files uploaded successfully." } }) { Text("Enable sync") } },
+        text = { Text("Upload this device's plans, session history, profile, preferences and rewards to ${user.email}. Planner files and imported audio are saved only in full ZIP exports.") },
+        confirmButton = { TextButton(onClick = { consent = false; runAction { CloudBackup.enable(); CloudBackup.upload(user.uid, force = true); message = "Cloud sync is on. Plans and progress uploaded successfully." } }) { Text("Enable sync") } },
         dismissButton = { TextButton(onClick = { consent = false }) { Text("Cancel") } })
     selected?.let { copy -> AlertDialog(onDismissRequest = { selected = null }, title = { Text("Restore this cloud copy?") },
-        text = { Text(if (org.json.JSONObject(copy.payload).has("plannerFiles")) "This replaces current plans, progress and planner file lists. Files will download from the cloud. Finish any timer first." else "This older copy contains plans and progress only. It has no cloud planner files. Local files are kept. Finish any timer first.") },
+        text = { Text("This replaces current plans, session history, profile, preferences and rewards. Local planner files and audio are kept. Files do not download from the cloud. Finish any timer first.") },
         confirmButton = { TextButton(onClick = { selected = null; runAction { CloudBackup.restoreCloud(copy); CloudBackup.enable(); onRestored() } }) { Text("Restore") } },
         dismissButton = { TextButton(onClick = { selected = null }) { Text("Cancel") } }) }
     if (logout) AlertDialog(onDismissRequest = { logout = false }, title = { Text("Log out?") },

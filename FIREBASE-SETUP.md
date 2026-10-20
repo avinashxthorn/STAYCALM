@@ -1,33 +1,17 @@
-# Version 4.0: account privacy and history
+# Version 4.0.1: progress-only cloud backup
 
-Keep the 3.9 `firestore.rules` already supplied. No new Firebase products or billing are required.
+Cloud backup now includes plans, completed session history/Insights, profile, preferences and rewards only. Planner files and imported audio stay on the phone and are included in full ZIP exports/imports. The 160 MiB cloud attachment cap is removed from progress sync. The separate 750 KB structured-snapshot limit and shared Firebase free quotas still apply.
+
+The app contains no planner-file upload/download code. Existing 3.9 rules still allow structured backups, so the new APK works with them. Publish the latest firestore.rules to also deny the removed file paths to older app versions. This does not delete existing uploaded chunks or free their storage; any cleanup is a separate owner action. Export earlier attachments from the original phone/old app before changing installations if you need them. Old cloud snapshots still recover their plans/history without downloading or adopting file references. No new Firebase products or billing are required.
 
 - **History and Insights:** cloud snapshots contain completed session logs (`logs`) plus rewards and preferences. Insights are recomputed from restored logs: Today, All time, session count, streak, last seven days, turtle stage and recent sessions.
 - **Logout:** private screens disappear and Login is shown. Each UID has its own local files/preferences and backup metadata. Same-account caches reopen after login; another account starts with its own data. Logout stops account notifications/playback and revokes app file-sharing grants.
 - **Pending changes:** if automatic sync is enabled and changes are pending, the logout dialog offers Sync and log out. Failed sync keeps you signed in so you can retry. Log out without syncing retains the private cache, but those changes cannot recover on another phone until uploaded.
-- **Cloud consent:** Login/Sign up includes Save my progress and planner files in the cloud. Checked enables automatic sync after verified recovery; unchecked keeps uploads off. Failed/skipped recovery never turns uploads on.
+- **Cloud consent:** Login/Sign up includes Save my progress in the cloud. Checked enables automatic sync after verified recovery; unchecked keeps uploads off. Failed/skipped recovery never turns uploads on.
 - **Verification:** new users must open the verification email, then tap I've verified my email. The app refreshes the ID token before verified-only Firestore access. Existing verified login restores an empty installation before opening home; existing account caches are retained so offline/unsynced work is not overwritten.
 - **Upgrade:** stay signed in on the old app when updating with the same signing certificate; its shared data is migrated once to that UID. Unclaimed data left by an older signed-out installation is preserved privately, never assigned automatically to another login. Restore from cloud or import your earlier full ZIP. Always export a ZIP before an uninstall/signature migration.
 
 Research: https://firebase.google.com/docs/auth/android/password-auth ; https://firebase.google.com/docs/auth/android/manage-users ; https://firebase.google.com/docs/firestore/manage-data/enable-offline . Firestore uses memory-only SDK cache; the app's owner-specific local files remain available offline after login.
-
----
-
-# Version 3.9: planner file recovery and simple login
-
-Existing project owners: **publish the updated `firestore.rules` from this repository before syncing planner attachments**. The earlier rules allow structured backups but deny the new owner-only `users/{uid}/plannerFiles/{fileId}/chunks/{index}` path. Your existing email/password setup and project config stay the same.
-
-After updating the app, use **Your account → Sync now** once on the phone containing the original planner attachments. Wait for success before removing local files or changing phones. Old 3.8 backups cannot recover files that were never uploaded. New recovery copies reference only completed, checksum-verified file uploads.
-
-Planner file bytes are stored as 512 KiB Firestore binary chunks under each verified account. Uploads checkpoint every eight chunks and resume after interruption. Limits are 80 MiB per file and 160 MiB of current planner files per device recovery copy. The entire project's free Firestore quota is still shared: 1 GiB stored plus daily operations and monthly network quotas. Spark remains usable without billing, but exceeding quotas pauses cloud access; it does not provide unlimited file hosting. Completed chunks and older device copies are retained until the owner removes them through the console. Imported audio stays in full ZIP exports.
-
-In **Firestore → Indexes → Automatic → Add exemption**, keep `backups` / `payload` disabled, and optionally add `chunks` / `data` with every index disabled. The checked-in `firestore.indexes.json` defines both. These exemptions avoid unnecessary index storage; do not disable the `updatedAt` index used to find recent recovery copies.
-
-The initial flow is now: **three intro slides → Get started → Login or Sign up → automatic cloud recovery on a fresh verified login → profile setup if needed → home**. Existing local work is never automatically replaced on login. A failed fresh-install restore stays on a recovery screen with Retry and an explicit Continue without restoring option. Profile and account settings show Login successful. Logout retains local data and stops automatic cloud uploads.
-
-Cloud restore downloads every referenced planner file from the server into staging, verifies expected length and SHA-256, and only then installs file lists and structured progress. Missing, partial or corrupted files abort restore before replacing existing preferences. A local cache is used to open attachments offline; deleting/uninstalling that cache no longer loses successfully synced planner files. Cloud copies are recovery checkpoints, not live concurrent editing across phones.
-
-Before installing a differently signed build, **export a full ZIP from the old app and save it outside the phone**. The existing build workflow uses temporary debug signing keys, so an update may require a separately planned migration; never uninstall while unsynced planner files are still only local. Full ZIP imports preserve existing planner files so they can be synced from the new app after login.
 
 ---
 
