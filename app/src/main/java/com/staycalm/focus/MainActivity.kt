@@ -99,7 +99,7 @@ class MainActivity:ComponentActivity(){
             var journalBusy by remember{mutableStateOf(false)}
             var journalError by remember{mutableStateOf<String?>(null)}
             var deleteAttachment by remember{mutableStateOf<StudyAttachment?>(null)}
-            var page by rememberSaveable{mutableIntStateOf(0)}
+            var page by rememberSaveable{mutableIntStateOf(if(intent.getBooleanExtra("open_ai_insights",false))2 else 0)}
             var tick by remember{mutableLongStateOf(0L)}
             var revision by remember{mutableIntStateOf(0)}
             var sound by remember{mutableStateOf(store.lastSound())}
@@ -192,6 +192,7 @@ class MainActivity:ComponentActivity(){
             var duration by remember{mutableIntStateOf(store.state().durationMinutes)}
             val permission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){}
             LaunchedEffect(profileReady){
+                AiCoachWork.schedule(this@MainActivity)
                 if(profileReady && Build.VERSION.SDK_INT>=33 &&
                     checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
                     permission.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -389,6 +390,7 @@ class MainActivity:ComponentActivity(){
                                 }
                                 2->{
                                     Header("Every minute matters.","A gentler look at how far you’ve come.")
+                                    StaycalmAiCard(onPlanAdded={revision++})
                                     Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){
                                         MiniMetric("$rewardBalance","REWARD POINTS",Modifier.weight(1f))
                                         MiniMetric("$freeCancellations / 3","FREE CANCELLATIONS",Modifier.weight(1f))

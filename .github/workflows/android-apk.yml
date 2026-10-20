@@ -117,7 +117,7 @@ jobs:
             gh release create "$TAG" \
               dist/STAYCALM.apk dist/STAYCALM.apk.sha256 dist/STAYCALM-signing-certificate.sha256 \
               --target "${GITHUB_SHA}" \
-              --title "STAYCALM 4.1 - Podcast controls and permanent signing (build ${GITHUB_RUN_NUMBER})" \
+              --title "STAYCALM 4.2 - Staycalm AI study coach (build ${GITHUB_RUN_NUMBER})" \
               --notes "Download STAYCALM.apk. This release uses the permanent pinned signing certificate and an increasing version code. Future releases using this same key update in place, preserving app data and login. Older APKs used temporary debug keys; the first migration may require a full ZIP backup and reinstall if their original key is unavailable. Unit/lint, Android UI, signature and install-over-existing-app retention checks passed." \
               --latest
           fi

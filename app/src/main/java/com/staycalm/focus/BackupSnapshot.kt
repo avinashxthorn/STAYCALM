@@ -6,7 +6,7 @@ import org.json.JSONObject
 /** Portable user data only. Never copies tokens, permission flags or a live timer. */
 object BackupSnapshot {
     const val MAX_BYTES = 750_000
-    val strings = setOf("plans", "logs", "intention", "profile_name", "profile_subject", "profile_phone", "sound", "youtube_link", "rss_link", "auto_intention_plan_id", "auto_intention_plan_date")
+    val strings = setOf("plans", "logs", "intention", "profile_name", "profile_subject", "profile_phone", "sound", "youtube_link", "rss_link", "auto_intention_plan_id", "auto_intention_plan_date", "ai_goal", "ai_weak_topics", "ai_exam_date")
     val ints = setOf("daily_goal", "quote_interval", "free_cancellations_used")
     val longs = setOf("reward_balance")
     val booleans = setOf("profile_ready", "dark_theme")

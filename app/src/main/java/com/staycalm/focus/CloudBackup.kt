@@ -51,7 +51,7 @@ object CloudBackup {
                     StudyVideoVisibility.background()
                 }
                 previousUid = uid
-                bindAccount(); schedule()
+                bindAccount(); schedule(); AiCoachWork.schedule(app)
             }
         }
     }
@@ -116,6 +116,7 @@ object CloudBackup {
         FocusStore(app).tasks().forEach { FocusAlarms.cancelTask(app, it.id) }
         FocusAlarms.cancelFocus(app)
         MotivationAlarms.cancel(app)
+        AiCoachWork.cancel(app)
         app.stopService(android.content.Intent(app, SoundService::class.java))
         app.stopService(android.content.Intent(app, TimerService::class.java))
         app.getSystemService(android.app.NotificationManager::class.java).cancelAll()

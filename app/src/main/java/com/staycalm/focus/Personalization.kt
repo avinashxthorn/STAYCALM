@@ -39,6 +39,7 @@ class Personalization(private val context: Context) {
         require(minutes in listOf(0, 60, 120, 180))
         preferences.edit().putInt("quote_interval", minutes).apply()
         MotivationAlarms.schedule(context)
+        AiCoachWork.schedule(context)
     }
 }
 
@@ -90,12 +91,15 @@ object MotivationAlarms {
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(CHANNEL, "Gentle study motivation", NotificationManager.IMPORTANCE_DEFAULT))
+        val ai = StaycalmAi(context)
+        val aiContent = ai.notification()
         val intent = PendingIntent.getActivity(context, REQUEST_CODE,
-            Intent(context, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val content = StudyQuotes.next(prefs.name(), prefs.subject())
+            Intent(context, MainActivity::class.java).putExtra("open_ai_insights", aiContent != null), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        if (ai.enabled() && ai.notifications() && aiContent == null) AiCoachWork.refreshSoon(context)
+        val content = aiContent ?: StudyQuotes.next(prefs.name(), prefs.subject())
         val notification = Notification.Builder(context, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
-            .setContentTitle("A little encouragement, ${prefs.name()} 🌷")
+            .setContentTitle(if (aiContent != null) "Staycalm AI · Your study coach" else "A little encouragement, ${prefs.name()} 🌷")
             .setContentText(content)
             .setStyle(Notification.BigTextStyle().bigText(content))
             .setAutoCancel(true)
