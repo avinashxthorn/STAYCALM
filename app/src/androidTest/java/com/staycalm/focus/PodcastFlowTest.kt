@@ -29,13 +29,13 @@ class PodcastFlowTest {
         }
     }
     private fun hub(loader: suspend (String) -> PodcastFeedPage) {
-        ui.activity.setContent {
+        ui.runOnUiThread { ui.activity.setContent {
             MaterialTheme {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     FocusMediaHub(false, false, {}, loader)
                 }
             }
-        }
+        } }
     }
     private fun find() {
         ui.onNodeWithTag("rss-link").performScrollTo().performTextInput("https://example.org/feed.xml")
@@ -95,10 +95,10 @@ class PodcastFlowTest {
     }
     @Test fun playerNamesEpisodeAndSendsTransportCommands() {
         val commands = mutableListOf<String>()
-        ui.activity.setContent { MaterialTheme {
+        ui.runOnUiThread { ui.activity.setContent { MaterialTheme {
             PodcastPlayerControls(AudioStatus(id = "podcast", playing = true, duration = 300_000,
                 position = 60_000, title = "Science today")) { command, _ -> commands += command }
-        } }
+        } } }
         ui.onNodeWithText("Science today").assertIsDisplayed()
         ui.onNodeWithContentDescription("Back 30 seconds").performClick()
         ui.onNodeWithContentDescription("Pause podcast").performClick()
