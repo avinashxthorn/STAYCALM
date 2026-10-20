@@ -42,20 +42,38 @@ import java.time.temporal.ChronoUnit
 import kotlin.math.*
 
 private val Ink: Color
-    @Composable get() = if(LocalStaycalmDark.current) Color(0xFFF9E7F0) else Color(0xFF542536)
+    @Composable get() = if(LocalStaycalmDark.current) Color(0xFFF3F4F5) else Color(0xFF202124)
 private val Rose: Color
-    @Composable get() = if(LocalStaycalmDark.current) Color(0xFFD66A9D) else Color(0xFFAC345F)
+    @Composable get() = if(LocalStaycalmDark.current) Color(0xFF53D1B5) else Color(0xFF0E7564)
 private val Blush: Color
-    @Composable get() = if(LocalStaycalmDark.current) Color(0xFF422634) else Color(0xFFFCE8EE)
+    @Composable get() = if(LocalStaycalmDark.current) Color(0xFF273A35) else Color(0xFFE7F4EF)
 private val Fog: Color
-    @Composable get() = if(LocalStaycalmDark.current) Color(0xFF191219) else Color(0xFFFFF8FA)
+    @Composable get() = if(LocalStaycalmDark.current) Color(0xFF171717) else Color(0xFFF8F9FA)
 private val Sub: Color
-    @Composable get() = if(LocalStaycalmDark.current) Color(0xFFD4ACBE) else Color(0xFF88616F)
+    @Composable get() = if(LocalStaycalmDark.current) Color(0xFFA5ACA9) else Color(0xFF66716D)
 private val Border: Color
-    @Composable get() = if(LocalStaycalmDark.current) Color(0xFF604052) else Color(0xFFEEE5E8)
+    @Composable get() = if(LocalStaycalmDark.current) Color(0xFF3B403E) else Color(0xFFE4E8E6)
 
-private val StaycalmColors=lightColorScheme(primary=Color(0xFFAC345F),onPrimary=Color.White,background=Color(0xFFFFF8FA),onBackground=Color(0xFF542536),surface=Color.White,onSurface=Color(0xFF542536),secondary=Color(0xFFAC345F),secondaryContainer=Color(0xFFFCE8EE),onSecondaryContainer=Color(0xFF542536),primaryContainer=Color(0xFFFCE8EE),onPrimaryContainer=Color(0xFF542536),surfaceVariant=Color(0xFFFCE8EE),onSurfaceVariant=Color(0xFF88616F),outline=Color(0xFFB88B9C),tertiary=Color(0xFFAC345F))
-private val StaycalmDarkColors=darkColorScheme(primary=Color(0xFFD66A9D),onPrimary=Color(0xFF28101B),background=Color(0xFF191219),onBackground=Color(0xFFF9E7F0),surface=Color(0xFF291E29),onSurface=Color(0xFFF9E7F0),secondary=Color(0xFFDA92B0),secondaryContainer=Color(0xFF422634),onSecondaryContainer=Color(0xFFF9E7F0),primaryContainer=Color(0xFF422634),onPrimaryContainer=Color(0xFFF9E7F0),surfaceVariant=Color(0xFF382936),onSurfaceVariant=Color(0xFFD4ACBE),outline=Color(0xFF936B7D),outlineVariant=Color(0xFF604052),tertiary=Color(0xFFE7A1C0))
+private val StaycalmColors=lightColorScheme(
+    primary=Color(0xFF0E7564),onPrimary=Color.White,
+    background=Color(0xFFF8F9FA),onBackground=Color(0xFF202124),
+    surface=Color.White,onSurface=Color(0xFF202124),
+    secondary=Color(0xFF396A60),onSecondary=Color.White,
+    secondaryContainer=Color(0xFFE7F4EF),onSecondaryContainer=Color(0xFF174B3D),
+    primaryContainer=Color(0xFFE7F4EF),onPrimaryContainer=Color(0xFF174B3D),
+    surfaceVariant=Color(0xFFF1F3F2),onSurfaceVariant=Color(0xFF66716D),
+    outline=Color(0xFF9BA9A3),outlineVariant=Color(0xFFE4E8E6),
+    tertiary=Color(0xFF0E7564))
+private val StaycalmDarkColors=darkColorScheme(
+    primary=Color(0xFF53D1B5),onPrimary=Color(0xFF09251E),
+    background=Color(0xFF171717),onBackground=Color(0xFFF3F4F5),
+    surface=Color(0xFF242424),onSurface=Color(0xFFF3F4F5),
+    secondary=Color(0xFF9EDBCB),onSecondary=Color(0xFF173B31),
+    secondaryContainer=Color(0xFF273A35),onSecondaryContainer=Color(0xFFCCF2E8),
+    primaryContainer=Color(0xFF273A35),onPrimaryContainer=Color(0xFFCCF2E8),
+    surfaceVariant=Color(0xFF303331),onSurfaceVariant=Color(0xFFA5ACA9),
+    outline=Color(0xFF778B82),outlineVariant=Color(0xFF3B403E),
+    tertiary=Color(0xFF78E5C6))
 
 class MainActivity:ComponentActivity(){
     private lateinit var store:FocusStore
@@ -252,7 +270,7 @@ class MainActivity:ComponentActivity(){
                         Row(Modifier.fillMaxWidth().padding(start=23.dp,end=23.dp,top=23.dp,bottom=9.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween){
                             Column(Modifier.weight(1f)){
                                 Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){
-                                    Text("staycalm.",fontWeight=FontWeight.ExtraBold,letterSpacing=(-1).sp,fontSize=25.sp,color=Rose)
+                                    Text("staycalm.",fontWeight=FontWeight.SemiBold,letterSpacing=(-1).sp,fontSize=25.sp,color=Ink)
                                     if(page==0)Surface(onClick={page=2},shape=CircleShape,color=Blush){
                                         Text("★ $rewardBalance pts",modifier=Modifier.padding(horizontal=10.dp,vertical=7.dp),fontWeight=FontWeight.Bold,fontSize=12.sp,color=Rose)
                                     }
@@ -276,14 +294,23 @@ class MainActivity:ComponentActivity(){
                                 }
                             }
                         }
-                        Crossfade(targetState=page,animationSpec=tween(220),label="page transition"){displayedPage->
-                        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=22.dp),verticalArrangement=Arrangement.spacedBy(18.dp)){
+                        AnimatedContent(
+                            targetState=page,
+                            transitionSpec={
+                                (slideInHorizontally(animationSpec=tween(280,easing=FastOutSlowInEasing),initialOffsetX={ if(targetState>initialState) it/6 else -it/6 }) +
+                                    fadeIn(animationSpec=tween(250))) togetherWith
+                                (slideOutHorizontally(animationSpec=tween(200),targetOffsetX={ if(targetState>initialState) -it/6 else it/6 }) +
+                                    fadeOut(animationSpec=tween(190)))
+                            },
+                            label="smooth page navigation"
+                        ){displayedPage->
+                        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)){
                             Spacer(Modifier.height(8.dp))
                             when(displayedPage){
                                 0->{
-                                    Surface(shape=RoundedCornerShape(23.dp),color=Blush){
+                                    Surface(shape=RoundedCornerShape(22.dp),color=Blush,border=BorderStroke(1.dp,Border)){
                                         Column(Modifier.fillMaxWidth().padding(18.dp)){
-                                            Text("HELLO, ${profileName.ifBlank{"FRIEND"}.uppercase()} ✨",fontWeight=FontWeight.Bold,fontSize=11.sp,letterSpacing=1.1.sp,color=Rose)
+                                            Text("GOOD TO SEE YOU, ${profileName.ifBlank{"FRIEND"}.uppercase()}",fontWeight=FontWeight.SemiBold,fontSize=11.sp,letterSpacing=1.1.sp,color=Rose)
                                             Spacer(Modifier.height(6.dp))
                                             Text(StudyQuotes.next(profileName,profileSubject),color=Ink,fontSize=13.sp,lineHeight=20.sp)
                                         }
@@ -416,14 +443,15 @@ class MainActivity:ComponentActivity(){
                                                 days.forEachIndexed{idx,day->Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Bottom){
                                                     Text(if(tallies[idx]>0)"${tallies[idx]}" else "",fontSize=10.sp,color=Sub)
                                                     Spacer(Modifier.height(4.dp))
-                                                    Box(Modifier.fillMaxWidth(.67f).height((max(5f,(tallies[idx].toFloat()/maxMinutes)*90f)).dp).background(if(day==LocalDate.now())Rose else Blush,RoundedCornerShape(topStart=6.dp,topEnd=6.dp)))
+                                                    val barHeight by animateFloatAsState(targetValue=max(5f,(tallies[idx].toFloat()/maxMinutes)*90f),animationSpec=tween(600,easing=FastOutSlowInEasing),label="seven day insight bar")
+                                                     Box(Modifier.fillMaxWidth(.67f).height(barHeight.dp).background(if(day==LocalDate.now())Rose else Blush,RoundedCornerShape(topStart=7.dp,topEnd=7.dp)))
                                                     Spacer(Modifier.height(7.dp))
                                                     Text(day.dayOfWeek.name.take(1),fontSize=12.sp,color=Sub)
                                                 }}
                                             }
                                         }
                                     }
-                                    Surface(shape=RoundedCornerShape(23.dp),color=MaterialTheme.colorScheme.surface){
+                                    Surface(shape=RoundedCornerShape(23.dp),color=MaterialTheme.colorScheme.surface,border=BorderStroke(1.dp,Border)){
                                         Column(Modifier.padding(20.dp)){
                                             Text("Small steps become chapters",fontSize=18.sp,fontWeight=FontWeight.Bold,color=Ink)
                                             TurtleAtelier(stage,Modifier.fillMaxWidth().height(195.dp))
@@ -584,7 +612,7 @@ class MainActivity:ComponentActivity(){
                                     Surface(shape=RoundedCornerShape(22.dp),color=MaterialTheme.colorScheme.surface){
                                         Column(Modifier.padding(19.dp)){Text("Your data, your choice",fontWeight=FontWeight.Bold,fontSize=17.sp);Spacer(Modifier.height(7.dp));Text("Your data saves locally. Account sync uploads plans, history, profile, preferences and rewards to your private Firebase account. Planner files and imported audio need a full ZIP export. No analytics trackers or AI.",color=Sub,fontSize=13.sp)}
                                     }
-                                    Text("STAYCALM · BLOOM EDITION 4.1",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
+                                    Text("STAYCALM · FOCUS EDITION 4.3",fontSize=10.sp,letterSpacing=1.5.sp,color=Sub)
                                 }
                             }
                             Spacer(Modifier.height(24.dp))
@@ -696,11 +724,11 @@ class MainActivity:ComponentActivity(){
 }
 
 @Composable private fun Header(title:String,subtitle:String){
-    Column(verticalArrangement=Arrangement.spacedBy(6.dp)){Text(title,fontSize=30.sp,fontWeight=FontWeight.Bold,color=Ink,letterSpacing=(-1).sp);Text(subtitle,fontSize=13.sp,color=Sub)}
+    Column(verticalArrangement=Arrangement.spacedBy(7.dp)){Text(title,fontSize=28.sp,fontWeight=FontWeight.SemiBold,color=Ink,letterSpacing=(-1).sp);Text(subtitle,fontSize=13.sp,color=Sub)}
 }
 @Composable private fun SmallLabel(s:String){Text(s,fontSize=10.sp,letterSpacing=1.3.sp,fontWeight=FontWeight.Bold,color=Sub)}
 @Composable private fun MiniMetric(value:String,label:String,modifier:Modifier=Modifier){
-    Surface(modifier,shape=RoundedCornerShape(20.dp),color=MaterialTheme.colorScheme.surface){
+    Surface(modifier,shape=RoundedCornerShape(20.dp),color=MaterialTheme.colorScheme.surface,border=BorderStroke(1.dp,Border)){
         Column(Modifier.padding(19.dp)){Text(value,fontSize=25.sp,fontWeight=FontWeight.Bold,color=Ink);Spacer(Modifier.height(3.dp));SmallLabel(label)}
     }
 }
