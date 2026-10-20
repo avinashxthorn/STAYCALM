@@ -146,7 +146,7 @@ fun FirstRunOnboarding(
                 }
                 Button(
                     onClick = {
-                        if (pager.currentPage == 2) onAccount()
+                        if (pager.currentPage == 2) { if (startAtProfile) profileStep = true else onAccount() }
                         else scope.launch { pager.animateScrollToPage(pager.currentPage + 1) }
                     },
                     modifier = Modifier.weight(1f).height(54.dp),

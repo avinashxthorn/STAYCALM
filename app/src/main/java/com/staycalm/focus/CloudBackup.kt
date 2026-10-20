@@ -50,7 +50,9 @@ object CloudBackup {
         "logs" to (data.getString("logs", "[]") ?: "[]"))))
         .put("plannerFiles", org.json.JSONArray(data.getString("study_attachments", "[]") ?: "[]")).toString()
     fun progress(message: String) { meta.edit().putString("status", message).apply() }
-    fun errorMessage(error: Exception): String = if (error is com.google.firebase.firestore.FirebaseFirestoreException &&
+    fun errorMessage(error: Exception): String = if (error is kotlinx.coroutines.TimeoutCancellationException)
+        "Cloud transfer paused. Check your connection and retry; completed parts are kept"
+        else if (error is com.google.firebase.firestore.FirebaseFirestoreException &&
         error.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED)
         "Cloud access was denied. Publish the updated STAYCALM firestore.rules and verify your email"
         else error.localizedMessage ?: "Check your connection and try again"

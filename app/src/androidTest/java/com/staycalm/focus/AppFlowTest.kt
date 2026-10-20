@@ -244,6 +244,11 @@ class AppFlowTest {
         assertEquals("Learner",Personalization(ui.activity).name())
         assertEquals("Veterinary science",Personalization(ui.activity).subject())
         assertEquals(120,FocusStore(ui.activity).dailyGoal())
+        ui.onNodeWithContentDescription("Back to introduction").performScrollTo().performClick()
+        ui.onNodeWithText("Next").performClick()
+        ui.onNodeWithText("Next").performClick()
+        ui.onNodeWithText("Get started").performClick()
+        ui.onNodeWithText("Let's make it yours.").assertIsDisplayed()
     }
     @Test fun playerPausesLoopsAndStopsAtSessionEnd(){
         fun command(action:String,position:Long=0){ui.runOnUiThread{
