@@ -18,44 +18,6 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
       allow delete: if false;
     }
-    match /users/{userId}/plannerFiles/{fileId} {
-      function validFile() {
-        let d = request.resource.data;
-        return fileId.matches('[a-f0-9]{32}')
-          && d.keys().hasAll(['size', 'sha256', 'chunks', 'uploaded', 'complete'])
-          && d.keys().hasOnly(['size', 'sha256', 'chunks', 'uploaded', 'complete'])
-          && d.size is int && d.size > 0 && d.size <= 83886080
-          && d.sha256 is string && d.sha256.matches('[a-f0-9]{64}')
-          && d.chunks is int && d.chunks > 0 && d.chunks <= 160
-          && (d.chunks - 1) * 524288 < d.size && d.size <= d.chunks * 524288
-          && d.uploaded is int && d.uploaded > 0 && d.uploaded <= d.chunks
-          && d.complete is bool && d.complete == (d.uploaded == d.chunks);
-      }
-      allow read: if owner(userId);
-      allow create: if owner(userId) && validFile();
-      allow update: if owner(userId) && validFile()
-        && request.resource.data.size == resource.data.size
-        && request.resource.data.sha256 == resource.data.sha256
-        && request.resource.data.chunks == resource.data.chunks
-        && request.resource.data.uploaded >= resource.data.uploaded
-        && (!resource.data.complete || request.resource.data == resource.data);
-      allow delete: if false;
-      match /chunks/{chunkId} {
-        function validChunk() {
-          return fileId.matches('[a-f0-9]{32}')
-            && chunkId.matches('([0-9]|[1-9][0-9]|1[0-5][0-9])')
-            && request.resource.data.keys().hasAll(['data'])
-            && request.resource.data.keys().hasOnly(['data'])
-            && request.resource.data.data is bytes
-            && request.resource.data.data.size() > 0
-            && request.resource.data.data.size() <= 524288;
-        }
-        allow read: if owner(userId);
-        allow create: if owner(userId) && validChunk();
-        allow update: if owner(userId) && validChunk() && request.resource.data == resource.data;
-        allow delete: if false;
-      }
-    }
     match /{document=**} { allow read, write: if false; }
   }
 }

@@ -31,43 +31,19 @@ test('client cannot delete recovery copies or write outside allowed path', async
   await assertFails(setDoc(doc(db('alice'), 'users/alice'), { public: true }));
 });
 
-test('planner bytes and file manifests are private and immutable when complete', async () => {
-  const { Bytes, writeBatch } = await import('firebase/firestore');
-  const id = 'a'.repeat(32);
-  const filePath = `users/alice/plannerFiles/${id}`;
-  const chunkPath = `${filePath}/chunks/0`;
-  const data = { data: Bytes.fromUint8Array(new Uint8Array([1, 2, 3])) };
-  const state = { size: 3, sha256: 'b'.repeat(64), chunks: 1, uploaded: 1, complete: true };
-  const ownDb = db('alice');
-  const batch = writeBatch(ownDb);
-  batch.set(doc(ownDb, chunkPath), data);
-  batch.set(doc(ownDb, filePath), state);
-  await assertSucceeds(batch.commit());
-  await assertSucceeds(getDoc(doc(db('alice'), chunkPath)));
-  await assertSucceeds(setDoc(doc(db('alice'), chunkPath), data)); // Retry of same bytes.
-  await assertFails(getDoc(doc(db('bob'), chunkPath)));
-  await assertFails(getDoc(doc(db('alice', false), filePath)));
-  await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), chunkPath)));
-  await assertFails(setDoc(doc(db('alice'), chunkPath), { data: Bytes.fromUint8Array(new Uint8Array([3, 2, 1])) }));
-  await assertFails(setDoc(doc(db('alice'), filePath), { ...state, sha256: 'c'.repeat(64) }));
-  await assertFails(deleteDoc(doc(db('alice'), chunkPath)));
-});
-
-test('rejects oversized bytes, unsupported fields and false completion states', async () => {
-  const { Bytes } = await import('firebase/firestore');
+test('planner file uploads and cloud reads are disabled', async () => {
   const filePath = `users/alice/plannerFiles/${'a'.repeat(32)}`;
-  await assertFails(setDoc(doc(db('alice'), `${filePath}/chunks/0`), { data: Bytes.fromUint8Array(new Uint8Array(524289)) }));
-  await assertFails(setDoc(doc(db('alice'), `${filePath}/chunks/160`), { data: Bytes.fromUint8Array(new Uint8Array([1])) }));
-  await assertFails(setDoc(doc(db('alice'), `${filePath}/chunks/0`), { data: 'not binary' }));
-  await assertFails(setDoc(doc(db('alice'), filePath), { size: 3, sha256: 'b'.repeat(64), chunks: 1, uploaded: 0, complete: true }));
-});
-
-test('partial file checkpoints may advance but cannot change identity or go backwards', async () => {
-  const ref = doc(db('alice'), `users/alice/plannerFiles/${'c'.repeat(32)}`);
-  const partial = { size: 524289, sha256: 'a'.repeat(64), chunks: 2, uploaded: 1, complete: false };
-  await assertSucceeds(setDoc(ref, partial));
-  await assertFails(setDoc(ref, { ...partial, size: 524290 }));
-  await assertFails(setDoc(ref, { ...partial, uploaded: 0 }));
-  await assertSucceeds(setDoc(ref, { ...partial, uploaded: 2, complete: true }));
-  await assertFails(setDoc(ref, partial));
+  const chunkPath = `${filePath}/chunks/0`;
+  // Existing server data is retained, but is no longer accessible to app clients.
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), filePath), { complete: true });
+    await setDoc(doc(context.firestore(), chunkPath), { data: 'old bytes' });
+  });
+  await assertFails(getDoc(doc(db('alice'), filePath)));
+  await assertFails(getDoc(doc(db('alice'), chunkPath)));
+  await assertFails(setDoc(doc(db('alice'), chunkPath), { data: 'new bytes' }));
+  await assertFails(setDoc(doc(db('alice'), filePath), { complete: true }));
+  await assertFails(getDoc(doc(db('bob'), chunkPath)));
+  await assertFails(deleteDoc(doc(db('alice'), chunkPath)));
+  await assertSucceeds(setDoc(doc(db('alice'), path), backup()));
 });

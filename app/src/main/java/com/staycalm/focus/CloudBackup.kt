@@ -30,7 +30,7 @@ object CloudBackup {
     private lateinit var data: SharedPreferences
     // A strong reference is required: SharedPreferences holds listeners weakly.
     private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key in BackupSnapshot.keys || key == "study_attachments") schedule()
+        if (key in BackupSnapshot.keys) schedule()
     }
     fun initialize(context: Context) {
         app = context.applicationContext
@@ -70,20 +70,20 @@ object CloudBackup {
     }
     fun payload(uid: String? = AccountData.uid(app)): String {
         val values = AccountData.preferencesFor(app, uid).all
-        return org.json.JSONObject(BackupSnapshot.encode(values + mapOf(
-            "plans" to (values["plans"] ?: "[]"), "logs" to (values["logs"] ?: "[]"))))
-            .put("plannerFiles", org.json.JSONArray(values["study_attachments"] as? String ?: "[]")).toString()
+        return BackupSnapshot.encode(values + mapOf(
+            "plans" to (values["plans"] ?: "[]"), "logs" to (values["logs"] ?: "[]")))
     }
-    fun progress(message: String) { meta.edit().putString("status", message).apply() }
     fun errorMessage(error: Exception): String = if (error is kotlinx.coroutines.TimeoutCancellationException)
-        "Cloud transfer paused. Check your connection and retry; completed parts are kept"
+        "Cloud sync paused. Check your connection and retry"
         else if (error is com.google.firebase.firestore.FirebaseFirestoreException &&
         error.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED)
         "Cloud access was denied. Publish the updated STAYCALM firestore.rules and verify your email"
         else error.localizedMessage ?: "Check your connection and try again"
     suspend fun restoreCloud(copy: CloudCopy) {
         val uid = auth().currentUser?.uid ?: error("Sign in first.")
-        CloudPlannerFiles(app).restore(uid, copy.payload) { if (AccountData.uid(app) == uid) progress(it) }
+        // Older snapshots may contain plannerFiles metadata. Decode only structured data;
+        // cloud restore never downloads file bytes or changes local attachment/audio lists.
+        restore(copy.payload, expectedUid = uid)
     }
     suspend fun recoverAfterLogin(enableSync: Boolean = false): Boolean {
         bindAccount()
@@ -154,8 +154,6 @@ object CloudBackup {
         BackupSnapshot.decode(snapshotString)
         val hash = hash(snapshotString)
         if (!force && hash == accountMeta.getString("hash", null)) return
-        val files = PlannerManifest.parse(org.json.JSONObject(snapshotString).getJSONArray("plannerFiles"))
-        CloudPlannerFiles(app).upload(expectedUid, files) { if (AccountData.uid(app) == expectedUid) progress(it) }
         require(enabled() && auth().currentUser?.uid == expectedUid) { "Cloud sync stopped because the account changed." }
         val ref = FirebaseFirestore.getInstance().collection("users").document(user.uid).collection("backups").document(deviceId())
         try { kotlinx.coroutines.withTimeout(30_000) { ref.set(mapOf("schema" to 1, "payload" to snapshotString, "label" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".take(100),

@@ -153,6 +153,27 @@ class AppFlowTest {
             assertTrue(store.state().running)
         } finally { store.abandon() }
     }
+    @Test fun cloudSnapshotsExcludeFilesAndLegacyRestoreKeepsLocalJournal() {
+        val context = ui.activity
+        val before = CloudBackup.payload()
+        val source = android.net.Uri.parse("android.resource://${context.packageName}/${Ambients.all.first().raw}")
+        val file = StudyJournal(context).import(LocalDate.now(), source)
+        try {
+            // Importing files cannot inflate cloud snapshots or affect history sync.
+            assertEquals(before, CloudBackup.payload())
+            val snapshot = org.json.JSONObject(CloudBackup.payload())
+            assertFalse(snapshot.has("plannerFiles"))
+            assertFalse(snapshot.getJSONObject("values").has("study_attachments"))
+            // Older cloud copies may refer to missing/oversized files. Restore their progress
+            // without attempting a download, enforcing a file quota, or adopting file lists.
+            snapshot.put("plannerFiles", org.json.JSONArray().put(org.json.JSONObject()
+                .put("id", "missing-old-file").put("size", 300L * 1024 * 1024)))
+            CloudBackup.restore(snapshot.toString())
+            assertTrue(StudyJournal(context).all().any { it.id == file.id })
+            assertTrue(File(AccountData.root(context), "journal/${file.id}").isFile)
+            assertFalse(StudyJournal(context).all().any { it.id == "missing-old-file" })
+        } finally { StudyJournal(context).remove(file) }
+    }
     @Test fun fullBackupRestoresPlansJournalAndImportedAudio(){
         val context=ui.activity
         val store=FocusStore(context)
