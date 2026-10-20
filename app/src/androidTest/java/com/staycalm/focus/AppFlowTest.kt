@@ -362,10 +362,11 @@ class AppFlowTest {
         ui.runOnUiThread {
             ui.activity.setContent {
                 androidx.compose.material3.MaterialTheme {
-                    FirstRunOnboarding(startAtProfile=true, onFinish={ name, subject, goal, interval ->
+                    FirstRunOnboarding(startAtProfile=true, onFinish={ name, subject, goal, interval, coach ->
                         Personalization(ui.activity).saveProfile(name,subject)
                         Personalization(ui.activity).setInterval(interval)
                         FocusStore(ui.activity).setDailyGoal(goal)
+                        StaycalmAi(ui.activity).saveDetails(coach.goal,coach.weak,coach.targetDate,coach.area,coach.preferredTime,coach.enabled,coach.notifications)
                     })
                 }
             }
@@ -374,9 +375,12 @@ class AppFlowTest {
         ui.onNodeWithText("Start my journey").assertIsNotEnabled()
         ui.onNodeWithTag("onboarding-name").performTextInput("Learner")
         ui.onNodeWithTag("onboarding-subject").performTextInput("Veterinary science")
+        ui.onNodeWithTag("onboarding-future-goal").performScrollTo().performTextInput("Prepare for LPM")
         ui.onNodeWithText("Start my journey").performScrollTo().performClick()
         assertEquals("Learner",Personalization(ui.activity).name())
         assertEquals("Veterinary science",Personalization(ui.activity).subject())
+        assertEquals("Prepare for LPM",StaycalmAi(ui.activity).goal())
+        assertTrue(StaycalmAi(ui.activity).enabled())
         assertEquals(120,FocusStore(ui.activity).dailyGoal())
         ui.onNodeWithContentDescription("Back to introduction").performScrollTo().performClick()
         ui.onNodeWithText("Next").performClick()

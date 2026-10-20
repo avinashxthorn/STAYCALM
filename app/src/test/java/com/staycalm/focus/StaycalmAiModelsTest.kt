@@ -44,6 +44,12 @@ class StaycalmAiModelsTest {
         o.getJSONArray("days").getJSONObject(0).put("minutes", 0)
         assertThrows(Exception::class.java) { parse(o) }
     }
+    @Test fun rejectsFractionalDurationsAndInvalidPreferredTimes() {
+        val o=response();o.getJSONArray("days").getJSONObject(0).put("minutes",25.5)
+        assertThrows(Exception::class.java){parse(o)}
+        val p=response();p.getJSONArray("days").getJSONObject(0).put("preferredTime","25:00")
+        assertThrows(Exception::class.java){parse(p)}
+    }
     @Test fun backupKeepsGoalsButExcludesKeysConsentAndPrivateGeneratedCache() {
         val encoded = BackupSnapshot.encode(mapOf("plans" to "[]", "logs" to "[]", "ai_goal" to "LPM Paper I",
             "ai_weak_topics" to "Housing", "ai_exam_date" to "2026-11-01", "ai_key" to "never-export",

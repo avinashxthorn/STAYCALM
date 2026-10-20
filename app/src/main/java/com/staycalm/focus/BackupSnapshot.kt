@@ -6,7 +6,7 @@ import org.json.JSONObject
 /** Portable user data only. Never copies tokens, permission flags or a live timer. */
 object BackupSnapshot {
     const val MAX_BYTES = 750_000
-    val strings = setOf("plans", "logs", "intention", "profile_name", "profile_subject", "profile_phone", "sound", "youtube_link", "rss_link", "auto_intention_plan_id", "auto_intention_plan_date", "ai_goal", "ai_weak_topics", "ai_exam_date")
+    val strings = setOf("plans", "logs", "intention", "profile_name", "profile_subject", "profile_phone", "sound", "youtube_link", "rss_link", "auto_intention_plan_id", "auto_intention_plan_date", "ai_goal", "ai_weak_topics", "ai_exam_date", "ai_focus_area", "ai_preferred_time")
     val ints = setOf("daily_goal", "quote_interval", "free_cancellations_used")
     val longs = setOf("reward_balance")
     val booleans = setOf("profile_ready", "dark_theme")
@@ -44,6 +44,7 @@ object BackupSnapshot {
             java.time.LocalDate.parse(p.getString("date")); java.time.LocalTime.parse(p.getString("time"))
             require(p.getInt("duration") in 1..1440)
             p.getBoolean("done"); p.getBoolean("remind")
+            require(p.optString("kind", "focus") in listOf("focus", "break"))
         }
         val logs = JSONArray(result.getValue("logs") as String)
         val logIds = mutableSetOf<String>()

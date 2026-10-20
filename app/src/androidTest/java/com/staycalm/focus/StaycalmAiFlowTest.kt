@@ -39,12 +39,13 @@ class StaycalmAiFlowTest {
             MaterialTheme { Column(Modifier.verticalScroll(rememberScrollState())) { StaycalmAiCard {} } }
         }
     }
-    @Test fun startsWithExplicitSetupAndNoAutomaticRequests() {
+    @Test fun usesOnlyStaycalmAiBrandingAndNeverAsksForAKey() {
         mount()
         ui.onNodeWithText("Staycalm AI").assertExists()
-        ui.onNodeWithText("Connect Gemini to build your first personalized study plan.").assertExists()
-        ui.onNodeWithText("Coach settings").performScrollTo().performClick()
-        ui.onNodeWithText("Gemini API key").assertExists()
+        ui.onNodeWithText("AI coaching is off. You can enable it in AI settings.").assertExists()
+        ui.onNodeWithText("AI settings").performScrollTo().performClick()
+        ui.onNodeWithText("Gemini API key").assertDoesNotExist()
+        ui.onNodeWithText("AI personalized notifications").assertExists()
         ui.onNodeWithText("Cancel").performClick()
         assertEquals(0L, AccountData.preferences(ui.activity).getLong("ai_last_request", 0L))
     }
@@ -55,7 +56,8 @@ class StaycalmAiFlowTest {
         ui.runOnUiThread { AccountData.preferences(ui.activity).edit().putBoolean("ai_enabled", true).putString("ai_report", report.encode()).commit() }
         mount()
         assertTrue(FocusStore(ui.activity).tasks().isEmpty())
-        ui.onAllNodesWithText("Add to planner").onFirst().performScrollTo().performClick()
+        ui.onAllNodesWithText("Review & add").onFirst().performScrollTo().performClick()
+        ui.onNodeWithText("Add task").performClick()
         ui.onNodeWithText("Added to planner").assertIsNotEnabled()
         val task = FocusStore(ui.activity).tasks().single()
         assertTrue(task.title.contains("Swine topic 1"))
@@ -63,4 +65,16 @@ class StaycalmAiFlowTest {
         assertEquals("18:00", task.time)
         assertEquals(report.days.first().date, task.date)
     }
+    @Test fun plannedBreakKeepsItsModeAndRepeatedSavingIsIdempotent() {
+        val store=FocusStore(ui.activity)
+        val draft=AiPlanDraft("Stretch and water",LocalDate.now().plusDays(1).toString(),"18:00",5,"break",sourceId="break-fixture")
+        val first=store.addAiTask(draft)
+        val second=store.addAiTask(draft)
+        assertEquals(first.id,second.id)
+        assertEquals(1,store.tasks().size)
+        assertEquals("break",store.tasks().single().kind)
+        store.configure(first.duration,first.id,first.kind)
+        assertEquals("break",store.state().mode)
+    }
+
 }

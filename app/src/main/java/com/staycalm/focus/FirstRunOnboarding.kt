@@ -31,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 
+data class FocusCoachSetup(val area:String,val goal:String,val weak:String,val targetDate:String,val preferredTime:String,val enabled:Boolean,val notifications:Boolean)
+
 private val introTitles = listOf(
     "Find your focus.",
     "Keep every little win.",
@@ -56,7 +58,7 @@ fun FirstRunOnboarding(
     onAccount: () -> Unit = {},
     startAtProfile: Boolean = false,
     signedInEmail: String? = null,
-    onFinish: (name: String, subject: String, goalMinutes: Int, quoteMinutes: Int) -> Unit
+    onFinish: (name: String, subject: String, goalMinutes: Int, quoteMinutes: Int, coach: FocusCoachSetup) -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
     val pager = rememberPagerState(pageCount = { 3 })
@@ -67,6 +69,14 @@ fun FirstRunOnboarding(
     var subject by rememberSaveable { mutableStateOf("") }
     var goal by rememberSaveable { mutableIntStateOf(120) }
     var quotes by rememberSaveable { mutableIntStateOf(120) }
+    var area by rememberSaveable { mutableStateOf("Study") }
+    var futureGoal by rememberSaveable { mutableStateOf("") }
+    var weak by rememberSaveable { mutableStateOf("") }
+    var targetDate by rememberSaveable { mutableStateOf("") }
+    var preferredTime by rememberSaveable { mutableStateOf("18:00") }
+    var aiEnabled by rememberSaveable { mutableStateOf(true) }
+    var aiNotifications by rememberSaveable { mutableStateOf(true) }
+    var setupError by remember { mutableStateOf<String?>(null) }
     val backdrop = if (LocalStaycalmDark.current) {
         Brush.verticalGradient(listOf(Color(0xFF20151E), Color(0xFF34202E), Color(0xFF191219)))
     } else {
@@ -198,12 +208,23 @@ fun FirstRunOnboarding(
                 )
                 OutlinedTextField(
                     value = subject, onValueChange = { subject = it.take(65) },
-                    label = { Text("What are you studying?") },
-                    placeholder = { Text("e.g. Veterinary medicine") },
+                    label = { Text("What would you like to focus on?") },
+                    placeholder = { Text("e.g. A study topic, work skill or personal goal") },
                     leadingIcon = { Icon(Icons.Rounded.MenuBook, null) },
                     singleLine = true, shape = RoundedCornerShape(17.dp),
                     modifier = Modifier.fillMaxWidth().testTag("onboarding-subject")
                 )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    listOf("Study","Work","Personal","Other").forEach { label ->
+                        FilterChip(selected=area==label,onClick={area=label},label={Text(label,fontSize=11.sp)})
+                    }
+                }
+                OutlinedTextField(futureGoal,{futureGoal=it.take(300)},label={Text("Your future goal")},placeholder={Text("e.g. Prepare for an exam or finish a project")},modifier=Modifier.fillMaxWidth().testTag("onboarding-future-goal"))
+                OutlinedTextField(weak,{weak=it.take(300)},label={Text("What needs more practice? (optional)")},modifier=Modifier.fillMaxWidth().testTag("onboarding-weak-topics"))
+                OutlinedTextField(targetDate,{targetDate=it.take(10)},label={Text("Target date · YYYY-MM-DD (optional)")},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("onboarding-target-date"))
+                OutlinedTextField(preferredTime,{preferredTime=it.take(5)},label={Text("Preferred focus time · HH:mm")},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("onboarding-focus-time"))
+                Row { Checkbox(aiEnabled,{aiEnabled=it});Column(Modifier.padding(top=10.dp)){Text("Automatic Staycalm AI coaching",fontWeight=FontWeight.SemiBold);Text("Your focus details, recent sessions and planner topics are processed by a cloud AI service. Files, audio, passwords and chats are not sent.",fontSize=11.sp,color=scheme.onSurfaceVariant)} }
+                Row { Checkbox(aiNotifications,{aiNotifications=it},enabled=aiEnabled);Column(Modifier.padding(top=10.dp)){Text("AI personalized notifications",fontWeight=FontWeight.SemiBold);Text("Can arrive at any hour when enabled. Change this in Settings whenever you like.",fontSize=11.sp,color=scheme.onSurfaceVariant)} }
                 Text("YOUR DAILY FOCUS GOAL", fontSize = 10.sp,
                     fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp, color = scheme.primary)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -239,8 +260,16 @@ fun FirstRunOnboarding(
                 }
                 Text("Your profile joins your account backup when cloud sync is enabled.",
                     fontSize = 11.sp, color = scheme.onSurfaceVariant)
+                setupError?.let{Text(it,color=scheme.error)}
                 Button(
-                    onClick = { onFinish(name.trim(), subject.trim(), goal, quotes) },
+                    onClick = {
+                        try {
+                            require(AiCoachFormat.validTime(preferredTime)){"Use a focus time in HH:mm format."}
+                            if(targetDate.isNotBlank())require(!java.time.LocalDate.parse(targetDate).isBefore(java.time.LocalDate.now())){"Choose today or a future target date."}
+                            onFinish(name.trim(),subject.trim(),goal,quotes,FocusCoachSetup(area,futureGoal,weak,targetDate,preferredTime,aiEnabled,aiNotifications))
+                        }catch(_:java.time.format.DateTimeParseException){setupError="Use a target date in YYYY-MM-DD format."}
+                        catch(e:Exception){setupError=e.message?:"Please check your focus details."}
+                    },
                     enabled = name.isNotBlank(),
                     modifier = Modifier.fillMaxWidth().height(54.dp),
                     shape = RoundedCornerShape(17.dp)

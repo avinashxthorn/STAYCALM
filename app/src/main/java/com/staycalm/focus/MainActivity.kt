@@ -228,10 +228,11 @@ class MainActivity:ComponentActivity(){
                     FirstRunOnboarding(startAtProfile = signedIn,
                         signedInEmail = if(signedIn) CloudBackup.auth().currentUser?.email else null,
                         onAccount = { introDone=true; welcomePrefs.edit().putBoolean("intro_done",true).apply()
-                            if(!signedIn)showAccount=true }, onFinish = { name, subject, dailyGoal, quoteMinutes ->
+                            if(!signedIn)showAccount=true }, onFinish = { name, subject, dailyGoal, quoteMinutes, coach ->
                         personalization.setInterval(quoteMinutes)
                         personalization.saveProfile(name, subject)
                         store.setDailyGoal(dailyGoal)
+                        StaycalmAi(this@MainActivity).saveDetails(coach.goal,coach.weak,coach.targetDate,coach.area,coach.preferredTime,coach.enabled,coach.notifications)
                         profileName=personalization.name()
                         profileSubject=personalization.subject()
                         draftName=profileName
@@ -372,9 +373,9 @@ class MainActivity:ComponentActivity(){
                                             Row(Modifier.fillMaxWidth().clickable{editTask=task}.padding(13.dp),verticalAlignment=Alignment.CenterVertically){
                                                 Checkbox(checked=task.done,onCheckedChange={store.replaceTask(task.copy(done=it));revision++},colors=CheckboxDefaults.colors(checkedColor=Rose))
                                                 Column(Modifier.weight(1f)){Text(task.title,fontWeight=FontWeight.SemiBold,color=if(task.done)Sub else Ink,textDecoration=if(task.done)TextDecoration.LineThrough else null)
-                                                    Text("${task.time}  ·  ${task.duration} min${if(task.remind)"  ·  Reminder" else ""}",color=Sub,fontSize=11.sp)}
+                                                    Text("${task.time}  ·  ${task.duration} min${if(task.kind=="break")"  ·  Break" else ""}${if(task.remind)"  ·  Reminder" else ""}",color=Sub,fontSize=11.sp)}
                                                 if(!task.done)IconButton(enabled=current.sessionId.isEmpty() && !current.running,onClick={
-                                                    store.configure(task.duration,task.id,"focus");mode="focus";intention=task.title;store.setIntention(task.title);startSession();revision++;page=0
+                                                    store.configure(task.duration,task.id,task.kind);mode=task.kind;intention=task.title;store.setIntention(task.title);startSession();revision++;page=0
                                                 }){Icon(Icons.Rounded.PlayCircle,"Focus on ${task.title}",tint=Rose)}
                                             }
                                         }
@@ -390,7 +391,13 @@ class MainActivity:ComponentActivity(){
                                 }
                                 2->{
                                     Header("Every minute matters.","A gentler look at how far you’ve come.")
-                                    StaycalmAiCard(onPlanAdded={revision++})
+                                    StaycalmAiCard(onStartBreak={minutes->
+                                        if(SessionUninstallGuard.unfinished(store.state())) "Finish your current session before starting a break, or use Plan this break."
+                                        else {
+                                            store.configure(minutes,mode="break");mode="break";duration=minutes;startSession();revision++
+                                            if(store.state().running){page=0;null}else "Complete the Android session setup to start your break."
+                                        }
+                                    },onPlanAdded={revision++})
                                     Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){
                                         MiniMetric("$rewardBalance","REWARD POINTS",Modifier.weight(1f))
                                         MiniMetric("$freeCancellations / 3","FREE CANCELLATIONS",Modifier.weight(1f))
@@ -445,6 +452,16 @@ class MainActivity:ComponentActivity(){
                                     Header("Make it yours.","A little control goes a long way.")
                                     Button(onClick={showAccount=true},modifier=Modifier.fillMaxWidth()) { Text("Account & backup") }
                                     Surface(shape=RoundedCornerShape(23.dp),color=MaterialTheme.colorScheme.surface){
+                                        Row(Modifier.fillMaxWidth().padding(19.dp),verticalAlignment=Alignment.CenterVertically){
+                                            Column(Modifier.weight(1f)){Text("AI personalized notifications",fontWeight=FontWeight.Bold);Text("Personal coaching at any hour when enabled. Your phone's notification and Do Not Disturb settings still apply.",fontSize=12.sp,color=Sub)}
+                                            Switch(checked=StaycalmAi(this@MainActivity).notifications(),onCheckedChange={requested->
+                                                StaycalmAi(this@MainActivity).setNotifications(requested);revision++
+                                                if(requested && Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                            })
+                                        }
+                                    }
+
+                                    Surface(shape=RoundedCornerShape(23.dp),color=MaterialTheme.colorScheme.surface){
                                         Column(Modifier.fillMaxWidth().padding(19.dp),verticalArrangement=Arrangement.spacedBy(11.dp)){
                                             Text("Your space, ${profileName.ifBlank{"friend"}}",fontWeight=FontWeight.Bold,fontSize=18.sp)
                                             if(CloudBackup.ready() && CloudBackup.auth().currentUser != null) {
@@ -452,7 +469,7 @@ class MainActivity:ComponentActivity(){
                                                 Text(CloudBackup.auth().currentUser?.email.orEmpty(),color=Sub,fontSize=12.sp)
                                             }
                                             OutlinedTextField(draftName,{draftName=it.take(40)},label={Text("What should we call you?")},singleLine=true,modifier=Modifier.fillMaxWidth())
-                                            OutlinedTextField(draftSubject,{draftSubject=it.take(65)},label={Text("What are you studying?")},singleLine=true,modifier=Modifier.fillMaxWidth())
+                                            OutlinedTextField(draftSubject,{draftSubject=it.take(65)},label={Text("What would you like to focus on?")},singleLine=true,modifier=Modifier.fillMaxWidth())
                                             OutlinedButton(onClick={
                                                 personalization.saveProfile(draftName,draftSubject)
                                                 profileName=personalization.name()

@@ -60,6 +60,7 @@ object CloudBackup {
         data = AccountData.preferences(app)
         meta = AccountData.metadata(app)
         data.registerOnSharedPreferenceChangeListener(listener)
+        AiCoachWork.observe(app)
     }
     fun ready() = FirebaseApp.getApps(app).isNotEmpty()
     fun auth(): FirebaseAuth = FirebaseAuth.getInstance()
