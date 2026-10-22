@@ -1,0 +1,1 @@
+{"name":"staycalm-ai-service-tests","private":true,"type":"module","scripts":{"test":"node --test tests/coach.test.mjs"},"engines":{"node":">=22.13.0"}}

@@ -15,7 +15,7 @@ import java.time.*
 import java.util.UUID
 import kotlin.math.roundToInt
 
-data class PlanItem(val id: String, val title: String, val date: String, val time: String, val duration: Int, val done: Boolean, val remind: Boolean)
+data class PlanItem(val id: String, val title: String, val date: String, val time: String, val duration: Int, val done: Boolean, val remind: Boolean, val kind: String = "focus")
 data class FocusLog(val id: String, val at: Long, val minutes: Int, val taskId: String, val intention: String = "")
 data class FocusState(val running: Boolean = false, val remainingMs: Long = 25*60_000L, val durationMinutes: Int = 25,
     val endElapsed: Long = 0L, val endWall: Long = 0L, val bootOrigin: Long = 0L, val taskId: String = "", val mode: String = "focus", val bootCount: Int = -1, val sessionId: String = "")
@@ -31,8 +31,8 @@ class FocusStore(private val context: Context) {
     // All Activity, service and receiver instances share one transaction lock.
     companion object { private val timerLock = Any() }
     private val prefs=AccountData.preferences(context)
-    private fun parsePlan(o:JSONObject) = PlanItem(o.optString("id"),o.optString("title"),o.optString("date"),o.optString("time"),o.optInt("duration",25),o.optBoolean("done"),o.optBoolean("remind"))
-    private fun encode(p:PlanItem)=JSONObject().put("id",p.id).put("title",p.title).put("date",p.date).put("time",p.time).put("duration",p.duration).put("done",p.done).put("remind",p.remind)
+    private fun parsePlan(o:JSONObject) = PlanItem(o.optString("id"),o.optString("title"),o.optString("date"),o.optString("time"),o.optInt("duration",25),o.optBoolean("done"),o.optBoolean("remind"),o.optString("kind","focus").takeIf{it=="break"}?:"focus")
+    private fun encode(p:PlanItem)=JSONObject().put("id",p.id).put("title",p.title).put("date",p.date).put("time",p.time).put("duration",p.duration).put("done",p.done).put("remind",p.remind).put("kind",p.kind)
     fun tasks():List<PlanItem> = runCatching{val a=JSONArray(prefs.getString("plans","[]")?:"[]");(0 until a.length()).map{parsePlan(a.getJSONObject(it))}}.getOrDefault(emptyList())
     fun savePlans(items:List<PlanItem>) {
         prefs.edit().putString("plans",JSONArray().apply{items.forEach{put(encode(it))}}.toString()).apply()
@@ -41,6 +41,14 @@ class FocusStore(private val context: Context) {
     fun addTask(title:String,date:String,time:String,duration:Int,remind:Boolean):PlanItem {
         val task=PlanItem(UUID.randomUUID().toString(),title,date,time,duration,false,remind)
         savePlans(tasks()+task);return task
+    }
+    fun addAiTask(draft:AiPlanDraft):PlanItem = synchronized(timerLock) {
+        val id=AiPlannerPolicy.id(draft)
+        val all=tasks()
+        all.firstOrNull{it.id==id}?.let{return@synchronized it}
+        val clean=AiPlannerPolicy.validate(draft,all,LocalDateTime.now())
+        val task=PlanItem(id,clean.title,clean.date,clean.time,clean.minutes,false,clean.remind,clean.kind)
+        savePlans(all+task);task
     }
     private fun detachAutoIntention(id:String){
         if(prefs.getString("auto_intention_plan_id",null)==id)

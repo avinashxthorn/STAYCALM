@@ -63,50 +63,41 @@ object StudyQuotes {
 }
 
 object MotivationAlarms {
-    private const val ACTION = "com.staycalm.focus.MOTIVATION"
-    private const val CHANNEL = "study_motivation"
-    private const val REQUEST_CODE = 5011
-    private fun alarm(context: Context) = context.getSystemService(AlarmManager::class.java)
-    private fun pending(context: Context): PendingIntent = PendingIntent.getBroadcast(
-        context, REQUEST_CODE, Intent(context, QuoteReceiver::class.java).setAction(ACTION),
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
-    fun cancel(context: Context) { alarm(context).cancel(pending(context)) }
-    /** Inexact by design: Android may defer delivery while the phone is idle. */
-    fun schedule(context: Context) {
-        val pi = pending(context)
-        alarm(context).cancel(pi)
-        val prefs = Personalization(context)
-        if (!prefs.isReady() || prefs.interval() == 0) return
-        val next = System.currentTimeMillis() + prefs.interval() * 60_000L
-        try { alarm(context).setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next, pi) }
-        catch (_: SecurityException) { /* Device restrictions can prohibit background alarms. */ }
+    private const val ACTION="com.staycalm.focus.MOTIVATION"
+    private const val REQUEST_CODE=5011
+    private fun alarm(context:Context)=context.getSystemService(AlarmManager::class.java)
+    private fun pending(context:Context)=PendingIntent.getBroadcast(context,REQUEST_CODE,
+        Intent(context,QuoteReceiver::class.java).setAction(ACTION),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    fun cancel(context:Context){alarm(context).cancel(pending(context))}
+    fun schedule(context:Context){
+        val pi=pending(context);alarm(context).cancel(pi)
+        val profile=Personalization(context);if(!profile.isReady())return
+        val ai=StaycalmAi(context);val interval=if(ai.notifications())ai.notificationInterval() else profile.interval()
+        if(interval==0)return
+        try{alarm(context).setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,System.currentTimeMillis()+interval*60000L,pi)}catch(_:SecurityException){}
     }
-    fun deliver(context: Context) {
-        val prefs = Personalization(context)
-        if (!prefs.isReady() || prefs.interval() == 0) return
-        val hour = LocalTime.now().hour
-        if (hour !in 8..21 || FocusStore(context).state().running) return
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
-        val manager = context.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(CHANNEL, "Gentle study motivation", NotificationManager.IMPORTANCE_DEFAULT))
-        val ai = StaycalmAi(context)
-        val aiContent = ai.notification()
-        val intent = PendingIntent.getActivity(context, REQUEST_CODE,
-            Intent(context, MainActivity::class.java).putExtra("open_ai_insights", aiContent != null), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        if (ai.enabled() && ai.notifications() && aiContent == null) AiCoachWork.refreshSoon(context)
-        val content = aiContent ?: StudyQuotes.next(prefs.name(), prefs.subject())
-        val notification = Notification.Builder(context, CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
-            .setContentTitle(if (aiContent != null) "Staycalm AI · Your study coach" else "A little encouragement, ${prefs.name()} 🌷")
-            .setContentText(content)
-            .setStyle(Notification.BigTextStyle().bigText(content))
-            .setAutoCancel(true)
-            .setContentIntent(intent)
-            .build()
-        try { manager.notify(REQUEST_CODE, notification) }
-        catch (_: SecurityException) { /* Permission can be revoked at any time. */ }
+    fun deliver(context:Context,hour:Int=LocalTime.now().hour){
+        val profile=Personalization(context);if(!profile.isReady())return
+        if(Build.VERSION.SDK_INT>=33&&ContextCompat.checkSelfPermission(context,Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)return
+        val ai=StaycalmAi(context);val aiMode=ai.notifications()
+        val content:String
+        if(aiMode){
+            if(!ai.notificationDue())return
+            val cached=ai.notification()
+            if(cached==null){AiCoachWork.refreshSoon(context);return}
+            content=cached
+        }else{
+            if(profile.interval()==0||hour !in 8..21||FocusStore(context).state().running)return
+            content=StudyQuotes.next(profile.name(),profile.subject())
+        }
+        val manager=context.getSystemService(NotificationManager::class.java)
+        val channel=if(aiMode)"staycalm_ai_coach" else "study_motivation"
+        manager.createNotificationChannel(NotificationChannel(channel,if(aiMode)"AI personalized notifications" else "Gentle study motivation",NotificationManager.IMPORTANCE_DEFAULT))
+        val click=PendingIntent.getActivity(context,REQUEST_CODE,Intent(context,MainActivity::class.java).putExtra("open_ai_insights",aiMode),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val notification=Notification.Builder(context,channel).setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle(if(aiMode)"Staycalm AI · Your focus coach" else "A little encouragement, ${profile.name()} 🌷")
+            .setContentText(content).setStyle(Notification.BigTextStyle().bigText(content)).setAutoCancel(true).setContentIntent(click).build()
+        try{manager.notify(REQUEST_CODE,notification);if(aiMode)ai.markNotified()}catch(_:SecurityException){}
     }
 }
 
